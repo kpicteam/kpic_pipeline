@@ -96,7 +96,7 @@ def update_wv_soln(order_fluxes, rel_v, old_wv_solns, tell_wvs, tell_model, star
 
             template_interp = np.interp(wvs_model, star_wvs*(1+redshift), star_model)
             tell_interp = np.interp(wvs_model, tell_wvs, tell_model)
-            response_interp = np.interp(xs, resp_xs, forder_response)
+            response_interp = np.interp(xs, resp_xs, order_response)
 
             model = template_interp * tell_interp * response_interp
             model *= np.nanpercentile(fit_data, 95)/np.nanpercentile(model, 95)
