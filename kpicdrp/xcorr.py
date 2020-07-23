@@ -148,6 +148,7 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, star_wvs, star_tem
 
     template += star_template
 
+
     return template
 
 
@@ -206,7 +207,7 @@ def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_templ
     return loglikes
 
 
-def lsqr_fit(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, telluric_wvs, telluric_fluxes, orders_responses):
+def lsqr_fit(guess, orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, telluric_wvs, telluric_fluxes, orders_responses):
 
     orders = [2]
                    
@@ -227,7 +228,7 @@ def lsqr_fit(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template
         
         return diff[np.where(~np.isnan(diff))]
 
-    result = optimize.least_squares(cost_function, (-40, 10, 5, 300), bounds=((-100, 0, 0, 100), (100, 100, 50, 700)))
+    result = optimize.least_squares(cost_function, guess, bounds=((-150, 0, 0, 0), (150, 20, np.inf, np.inf)))
 
     return result
 
