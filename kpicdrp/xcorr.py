@@ -103,7 +103,7 @@ def simple_xcorr(shifts, orders_wvs, orders_fluxes, template_wvs, template_fluxe
     return ccf, acf
 
 
-def generate_forward_model_singleorder(fitparams, orders_wvs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, telluric_wvs, telluric_fluxes, orders_responses, broadened=False):
+def generate_forward_model_singleorder(fitparams, orders_wvs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses, broadened=False):
     rvshift, vsini, pl_flux, star_flux = fitparams
 
 
@@ -129,19 +129,13 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, star_wvs, star_tem
     thiswvs_starframe = thiswvs/(1+new_redshift)
     resp_template = orders_responses
 
-    tell_template = np.interp(thiswvs, telluric_wvs, telluric_fluxes)
     star_template = np.interp(thiswvs, star_wvs, star_template_fluxes)
-    star_template /= ndi.median_filter(star_template, 200)
+    star_template /= np.percentile(star_template, 90)
 
     template = np.interp(thiswvs_starframe, template_wvs, broad_model)
-    template /= ndi.median_filter(template, 200)
+    template /= np.percentile(template, 90)
 
-    # # attempt to bin to account for undersampling
-    # template_noshift = np.mean(template_noshift.reshape([xs.shape[0], 5]), axis=1)
-    # template = np.mean(template.reshape([xs.shape[0], 5]), axis=1)
-
-    template *= resp_template * tell_template 
-    star_template *= resp_template
+    template *= resp_template 
 
     template *= pl_flux
     star_template *= star_flux
@@ -153,7 +147,7 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, star_wvs, star_tem
 
 
 
-def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, telluric_wvs, telluric_fluxes, orders_responses):
+def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses):
         
     loglikes = []
 
@@ -184,7 +178,7 @@ def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_templ
 
                     orders = [2]
                     fitparams = (shift, vsini, contrast, star_flux)
-                    model_orders = generate_forward_model_singleorder(fitparams, orders_wvs[orders], star_wvs, star_template_fluxes, template_wvs, broad_model, telluric_wvs, telluric_fluxes, orders_responses[orders], broadened=True)
+                    model_orders = generate_forward_model_singleorder(fitparams, orders_wvs[orders], star_wvs, star_template_fluxes, template_wvs, broad_model, orders_responses[orders], broadened=True)
 
                     model_continuun = ndi.median_filter(model_orders, 100)
                     data_continuum = ndi.median_filter(orders_fluxes[orders], 100)
@@ -207,9 +201,9 @@ def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_templ
     return loglikes
 
 
-def lsqr_fit(guess, orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, telluric_wvs, telluric_fluxes, orders_responses):
+def lsqr_fit(guess, orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses):
 
-    orders = [2]
+    orders = [6]
                    
     data_continuum = ndi.median_filter(orders_fluxes[orders], 100)
     norm_data = orders_fluxes[orders] - data_continuum + np.nanmedian(data_continuum)
@@ -219,7 +213,7 @@ def lsqr_fit(guess, orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_t
         shift, vsini, contrast, star_flux = fitparams
 
 
-        model_orders = generate_forward_model_singleorder(fitparams, orders_wvs[orders], star_wvs, star_template_fluxes, template_wvs, template_fluxes, telluric_wvs, telluric_fluxes, orders_responses[orders])
+        model_orders = generate_forward_model_singleorder(fitparams, orders_wvs[orders], star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses[orders])
 
         model_continuum = ndi.median_filter(model_orders, 100)
         norm_model = model_orders - model_continuum + np.nanmedian(model_continuum)
