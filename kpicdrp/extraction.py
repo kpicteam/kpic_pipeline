@@ -123,7 +123,7 @@ def extract_1d(dat_coords, dat_slice, center, sigma, skynoise):
 
 
 
-def extract_spec(sci_frame, num_sci_frames, noise_frame, fiber_traces, xs=None, offsets=None):
+def extract_spec(sci_frame, num_sci_frames, noise_frame, trace_centers, trace_sigmas, xs=None, offsets=None):
     """
     Extracts 1-D spectra from the traces
 
@@ -131,14 +131,15 @@ def extract_spec(sci_frame, num_sci_frames, noise_frame, fiber_traces, xs=None, 
         sci_frame: 2-D frame
         num_sci_frame: (int) number of science frames
         noise_frame: 2-D frame of noise per pixel in a frame
-        fiber_traces: list of tables of fiber trace parameters (N_fibers)
+        fiber_traces: list of size N_fibers of trace centers arrays with size (N_orders, Nx)
+        trace_sigmas: list of size N_fibers of trace sigams arrays with size (Norders, Nx)
     
     Output:
         trace_fluxes: shape of (N_fibers, N_orders, N_x) - 1D extracted fluxes of each fiber
         dark_flxues: shape of (N_offsets, Norders, N_x) - 1D extracted fluxes for each offset
     """
 
-    all_orders = [[] for _ in range(len(fiber_traces)+ 1)] # extra one for all the dark traces
+    all_orders = [[] for _ in range(len(trace_centers)+ 1)] # extra one for all the dark traces
 
     if offsets is None:
         offsets = [23, 15, -15, -23, -31, -39]
@@ -154,11 +155,9 @@ def extract_spec(sci_frame, num_sci_frames, noise_frame, fiber_traces, xs=None, 
 
 
     #for trace_params, trace3_params, trace1_params in zip(trace_dat, trace3_dat, trace1_dat):
-    for order_index in range(len(fiber_traces[0])):
-        order_trace_params = [trace_dat[order_index] for trace_dat in fiber_traces]
-        sigmas = [trace_params['sigma'] for trace_params in order_trace_params]
-        poly_params = [[trace_params['x3'], trace_params['x2'], trace_params['x1'], trace_params['x0']] for trace_params in order_trace_params]
-        trace_fits = [np.poly1d(this_poly_params) for this_poly_params in poly_params]
+    for order_index in range(len(trace_centers[0])):
+        trace_fits = [fiber_centers[order_index] for fiber_centers in trace_centers]
+        sigmas = [fiber_sigmas[order_index] for fiber_sigmas in trace_sigmas]
         
         all_trace_thisorder = [[] for _ in range(len(sigmas) + 1)]
         
@@ -168,21 +167,22 @@ def extract_spec(sci_frame, num_sci_frames, noise_frame, fiber_traces, xs=None, 
 
             avg_bkgd_flux = []
             for offset in offsets:
-                center = trace_fits[0](x) + offset
+                center = trace_fits[0][x] + offset
                 center_int = int(np.round(center))
                 dat_slice = sci_rotated[center_int-6:center_int+6+1,x]
                 ys = np.arange(center_int-6, center_int+6+1)
                 sky = skynoise[center_int-6:center_int+6+1,x]
 
-                flux = extract_1d(ys, dat_slice, center, sigmas[0], skynoise=sky)
+                flux = extract_1d(ys, dat_slice, center, sigmas[0][x], skynoise=sky)
                 multi_dark_fluxes.append(flux)
                 avg_bkgd_flux.append(dat_slice)
             all_trace_thisorder[-1].append(multi_dark_fluxes)
 
             bkgd = np.nanmedian(avg_bkgd_flux)
 
-            for this_order, trace_fit, sigma in zip(all_trace_thisorder[:-1], trace_fits, sigmas):
-                center = trace_fit(x) 
+            for this_order, trace_fit, trace_sigma in zip(all_trace_thisorder[:-1], trace_fits, sigmas):
+                center = trace_fit[x]
+                sigma = trace_sigma[x]
                 center_int = int(np.round(center))
                 dat_slice = sci_rotated[center_int-6:center_int+6+1,x]
                 ys = np.arange(center_int-6, center_int+6+1)
@@ -239,7 +239,7 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
     """
     orders_fluxes = []
     orders_sigmas = []
-    orders_sigmas_unbinned = []
+    orders_sigmas_fit = []
     orders_cuts = []
     orders_centers = []
     orders_center_fit = []
@@ -248,7 +248,7 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
 
     if xs is None:
         xmin = 0
-        xmax = 2000
+        xmax = frame.shape[0]
         xs = np.arange(xmin, xmax, 1)
 
     ends = guess_ends
@@ -297,14 +297,17 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
         order_fluxes[bad] = flux_smooth2[bad]
             
         order_sigma = np.median(order_sigmas)
+        sigma_fitargs = np.polyfit(xs, ndi.median_filter(order_sigmas, 15), 1)
         center_fitargs = np.polyfit(xs, ndi.median_filter(order_centers, 15), 3)
 
         center_fit = np.poly1d(center_fitargs)
         order_centers = center_fit(xs)
+
+        order_sigmas = np.poly1d(sigma_fitargs)(xs)
         
         orders_fluxes.append(order_fluxes)
-        orders_sigmas.append(order_sigma)
-        orders_sigmas_unbinned.append(order_sigmas)
+        orders_sigmas.append(order_sigmas)
+        orders_sigmas_fit.append(sigma_fitargs)
         orders_cuts.append(order_cuts)
         orders_centers.append(order_centers)
         orders_center_fit.append(center_fitargs)
@@ -330,24 +333,33 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
 
         plt.show()
 
-    return orders_center_fit, orders_sigmas, spectral_responses
+    return orders_centers, orders_sigmas, spectral_responses
 
 
-def measure_spectral_response(orders_fluxes, filter_size=500):
+def measure_spectral_response(orders_wvs, orders_fluxes, model_wvs, model_fluxes, filter_size=500):
     """
-    Measure the spectral response of the instrument/atmosphere assuming a flat light source
+    Measure the spectral response of the instrument/atmosphere (including telluric transmission)
 
     Args:
-        order_fluxes: Norder x Nchannels array of fluxes per order
+        orders_fluxes: Norder x Nchannels array of fluxes per order
+        orders_wvs: Norder x Nchannels array of wavelengths per order
+        model_wvs: array of wvs of a model spectrum (size N_model)
+        model_fluxes: array of fluxes of a model spectrum (size N_model). It's ok if it's not flux normalized. 
         filter_size: (int) smoothing size in pixels
     """
 
     spectral_responses = []
 
-    for order in orders_fluxes:
-        order_response = ndi.median_filter(order, filter_size)
+    for thiswvs, order in zip(orders_wvs, orders_fluxes):
+        #continuum = ndi.median_filter(order, filter_size)
+        
+        model = np.interp(thiswvs, model_wvs, model_fluxes)
+        #model_continuum = ndi.median_filter(order, filter_size)
 
-        spectral_responses.append(order_response/np.max(order_response))
+        this_response = order/model
+        this_response /= np.nanpercentile(this_response, 99)
+
+        spectral_responses.append(this_response)
 
     return spectral_responses
 
