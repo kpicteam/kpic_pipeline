@@ -10,7 +10,7 @@ from copy import copy
 import multiprocessing as mp
 from scipy.optimize import minimize
 import itertools
-from utils_2020.extract_flux import extract_flux
+from utils.extract_flux import extract_flux
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation
 from astropy import units as u
@@ -32,79 +32,60 @@ if __name__ == "__main__":
         pass
 
     mykpicdir = "/scr3/jruffio/data/kpic/"
-    fitbackground = True
+    fitbackground = False
     bad_pixel_fraction = 0.03
 
-    no_background = False
-    # mydir = os.path.join(mykpicdir,"20200607_5_Vul") #
-    # mydir = os.path.join(mykpicdir,"20200607_HIP_95771") #
-    # mydir = os.path.join(mykpicdir,"20200607_ups_Her") #
-    # mydir = os.path.join(mykpicdir,"20200607_HIP_81497") #
-    # mydir = os.path.join(mykpicdir,"20200608_d_Sco")#
-    # mydir = os.path.join(mykpicdir,"20200608_zet_Aql") #
-    # mydir = os.path.join(mykpicdir,"20200608_kap_And") #
-    # mydir = os.path.join(mykpicdir,"20200608_kap_And_B") #
-    # mydir = os.path.join(mykpicdir,"20200608_HR_7672_B") #
-    # mydir = os.path.join(mykpicdir,"20200608_HIP_81497_30s")#
-    # mydir = os.path.join(mykpicdir,"20200608_HIP_81497_7.5s")#
-    # mydir = os.path.join(mykpicdir,"20200609_ups_Her")#
-    # mydir = os.path.join(mykpicdir,"20200609_d_Sco")#
-    # mydir = os.path.join(mykpicdir,"20200609_kap_And") #
-    # mydir = os.path.join(mykpicdir,"20200609_HIP_81497") #
-    # mydir = os.path.join(mykpicdir,"20200609_kap_And_B") #
-    # mydir = os.path.join(mykpicdir,"20200609_HR_7672")#
-    # mydir = os.path.join(mykpicdir,"20200609_HR_7672_B")#
-    # mydir = os.path.join(mykpicdir,"20200609_zet_Aql")#
-    # mydir = os.path.join(mykpicdir,"20200609_ROXs_12B")
-    # mydir = os.path.join(mykpicdir,"20200701_ups_Her")
-    # mydir = os.path.join(mykpicdir,"20200701_HIP_81497")
-    # mydir = os.path.join(mykpicdir,"20200701_ROXs_42Bb")
-    # mydir = os.path.join(mykpicdir,"20200701_15_Sgr")
-    # mydir = os.path.join(mykpicdir,"20200701_HR_8799")
-    # mydir = os.path.join(mykpicdir,"20200701_HR_8799_c")
-    # mydir = os.path.join(mykpicdir,"20200702_ups_Her")
-    # mydir = os.path.join(mykpicdir,"20200702_HIP_81497")
-    # mydir = os.path.join(mykpicdir,"20200702_d_Sco")
-    # mydir = os.path.join(mykpicdir,"20200702_15_Sgr")
-    # mydir = os.path.join(mykpicdir,"20200702_ROXs_42Bb")
-    # mydir = os.path.join(mykpicdir,"20200702_ROXs_42B")
-    # mydir = os.path.join(mykpicdir,"20200702_ROXs_42B_daytime")
-    # mydir = os.path.join(mykpicdir,"20200702_ROXs_42B_fit")
-    # mydir = os.path.join(mykpicdir,"20200702_ROXs_42B_chopping")
-    # mydir = os.path.join(mykpicdir,"20200702_HR_8799")
-    # mydir = os.path.join(mykpicdir,"20200702_HR_8799_d")
-    # mydir = os.path.join(mykpicdir,"20200703_ups_Her")
-    # mydir = os.path.join(mykpicdir,"20200703_HIP_81497")
-    # mydir = os.path.join(mykpicdir,"20200703_HD_124683")
-    # mydir = os.path.join(mykpicdir,"20200703_d_Sco")
-    # mydir = os.path.join(mykpicdir,"20200703_ROXs_12B")
-    # mydir = os.path.join(mykpicdir,"20200703_HR_8799")
-    # mydir = os.path.join(mykpicdir,"20200703_HR_8799_e")
-    # mydir = os.path.join(mykpicdir,"20200703_kap_And")
-    mydir = os.path.join(mykpicdir,"20200703_kap_And_B")
-    # mydir,no_background,fitbackground = os.path.join(mykpicdir,"20200703_ROXs_12B_chopping"),True,True
+    # mydir = os.path.join(mykpicdir,"20191215_kap_And")
+    # mydir = os.path.join(mykpicdir,"20191215_kap_And_B")
+    # mydir = os.path.join(mykpicdir,"20191215_HD_295747")
+    # mydir = os.path.join(mykpicdir,"20191215_DH_Tau")
+    # mydir = os.path.join(mykpicdir,"20191215_DH_Tau_B")
+    # fitbackground = True
 
-    # filelist = glob(os.path.join(mydir, "raw", "*0041*.fits"))
-    filelist = glob(os.path.join(mydir, "raw", "*.fits"))
-    filelist.sort()
-    # filelist = filelist[np.size(filelist)-3::]
-    # filelist = filelist[8::]
-    # print(filelist)
-    # exit()
-    # filelist = filelist[5::]
+
+
+    # mydir = os.path.join(mykpicdir,"20191108_HD_1160")
+    # mydir = os.path.join(mykpicdir,"20191108_bet_Peg")
+    # mydir = os.path.join(mykpicdir,"20191108_DH_Tau")
+    # mydir = os.path.join(mykpicdir,"20191108_DH_Tau_B")
+    # mydir = os.path.join(mykpicdir,"20191108_2M0746A")
+    # mydir = os.path.join(mykpicdir,"20191108_2M0746B")
+    # mydir = os.path.join(mykpicdir,"20191108_HIP_12787_A")
+    # mydir = os.path.join(mykpicdir,"20191108_HIP_12787_B")
+    # fitbackground = True
+    # bad_pixel_fraction = 0.05
+
+    # mydir = os.path.join(mykpicdir,"20191107_kap_And")
+    mydir = os.path.join(mykpicdir,"20191107_kap_And_B")
+
+    # mydir = os.path.join(mykpicdir,"20191012_2M0746A")
+    # mydir = os.path.join(mykpicdir,"20191012_2M0746B")
+    # mydir = os.path.join(mykpicdir,"20191012_HD_1160_A")
+
+    # mydir = os.path.join(mykpicdir,"20191013A_kap_And")
+    # mydir = os.path.join(mykpicdir,"20191013B_kap_And")
+    # mydir = os.path.join(mykpicdir,"20191013B_gg_Tau")
+    # mydir = os.path.join(mykpicdir,"20191013B_gg_Tau_B")
+    # mydir = os.path.join(mykpicdir,"20191014_HR_8799")
+    # mydir = os.path.join(mykpicdir,"20191014_HIP_12787_A")
+    # mydir = os.path.join(mykpicdir,"20191014_HIP_12787_B")
+
+    # fitbackground = False
+    # bad_pixel_fraction = 0.05
+
+
+
 
     addbaryrv = True
 
     mydate = os.path.basename(mydir).split("_")[0]
-
 
     #background
     background_med_filename = glob(os.path.join(mydir, "calib", "*background*.fits"))[0]
     hdulist = pyfits.open(background_med_filename)
     background = hdulist[0].data
     background_header = hdulist[0].header
-    tint = float(background_header["TRUITIME"])
-    coadds = int(background_header["COADDS"])
+    tint = int(background_header["ITIME"])
 
 
     persisbadpixmap_filename = glob(os.path.join(mydir,"calib","*persistent_badpix*.fits"))[0]
@@ -113,34 +94,9 @@ if __name__ == "__main__":
     persisbadpixmap_header = hdulist[0].header
     ny,nx = persisbadpixmap.shape
 
-    if 0: # chopping
-        filelist = glob(os.path.join(mydir, "raw", "*.fits"))
-        filelist.sort()
-        filelistsub = [filelist[1],filelist[0],filelist[3],filelist[2]]
-        for filename,filenamesub in zip(filelist,filelistsub):
-
-            hdulist = pyfits.open(filename)
-            im = hdulist[0].data
-            header = hdulist[0].header
-            hdulist.close()
-            hdulist = pyfits.open(filenamesub)
-            im_sub = hdulist[0].data
-            hdulist.close()
-
-            hdulist = pyfits.HDUList()
-            hdulist.append(pyfits.PrimaryHDU(data=im-im_sub, header=header))
-            out = filename.replace(".fits","_pairsub.fits")
-            try:
-                hdulist.writeto(out, overwrite=True)
-            except TypeError:
-                hdulist.writeto(out, clobber=True)
-            hdulist.close()
-
-        exit()
-
     if 0: # generate null backgrounds.
         hdulist = pyfits.HDUList()
-        background_header["TRUITIME"] = 0
+        background_header["ITIME"] = 0
         hdulist.append(pyfits.PrimaryHDU(data=background*0, header=background_header))
         out = os.path.join(mydir,"calib", "null_background_med_tint{0}.fits".format(0))
         try:
@@ -150,7 +106,7 @@ if __name__ == "__main__":
         hdulist.close()
 
         hdulist = pyfits.HDUList()
-        persisbadpixmap_header["TRUITIME"] = 0
+        persisbadpixmap_header["ITIME"] = 0
         hdulist.append(pyfits.PrimaryHDU(data=persisbadpixmap, header=persisbadpixmap_header))
         out = os.path.join(mydir,"calib", "null_persistent_badpix_tint{0}.fits".format(0))
         try:
@@ -176,70 +132,67 @@ if __name__ == "__main__":
 
     tracemask = np.ones(background.shape)
 
-    trace_loc_slit = np.zeros((trace_loc.shape[0],trace_loc.shape[1],trace_loc.shape[2]))
+    trace_loc_slit = np.zeros((trace_loc.shape[0]*2,trace_loc.shape[1],trace_loc.shape[2]))
     trace_loc_dark = np.zeros((trace_loc.shape[0]*2,trace_loc.shape[1],trace_loc.shape[2]))
     for order_id in range(9):
-        for _fib in range(trace_loc.shape[0]):
+        for _fib in range(3):
             tracemask[trace_loc[_fib, order_id, :].astype(np.int),np.arange(background.shape[1])] = np.nan
             tracemask[trace_loc[_fib, order_id, :].astype(np.int)+1,np.arange(background.shape[1])] = np.nan
             tracemask[trace_loc[_fib, order_id, :].astype(np.int)-1,np.arange(background.shape[1])] = np.nan
 
-        dy1 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[1, order_id, :]) / 2
-        dy2 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[trace_loc.shape[0]-1, order_id, :])
+        dy1 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[1, order_id, :])/2
+        dy2 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[2, order_id, :])
         # exit()
         if np.isnan(dy1):
             dy1 = 10
         if np.isnan(dy2):
             dy2 = 40
-        print(dy1, dy2)
+        print(dy1,dy2)
 
-        trace_loc_slit[0, order_id, :] = trace_loc[0, order_id, :] - dy1
-        trace_loc_slit[1, order_id, :] = trace_loc[1, order_id, :] - dy1
-        trace_loc_slit[2, order_id, :] = trace_loc[2, order_id, :] - dy1
-        trace_loc_slit[3, order_id, :] = trace_loc[3, order_id, :] - dy1
+        trace_loc_slit[0, order_id, :]=trace_loc[0, order_id, :]+dy1
+        trace_loc_slit[1, order_id, :]=trace_loc[1, order_id, :]+dy1
+        trace_loc_slit[2, order_id, :]=trace_loc[2, order_id, :]+dy1
+        trace_loc_slit[3, order_id, :]=trace_loc[0, order_id, :]+dy2
+        trace_loc_slit[4, order_id, :]=trace_loc[1, order_id, :]+dy2+dy1
+        trace_loc_slit[5, order_id, :]=trace_loc[2, order_id, :]+dy2+2*dy1
 
         if order_id == 0:
-            trace_loc_dark[0, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 0 * dy1
-            trace_loc_dark[1, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 1 * dy1
-            trace_loc_dark[2, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 2 * dy1
-            trace_loc_dark[3, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 3 * dy1
-
-            trace_loc_dark[4, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 4 * dy1
-            trace_loc_dark[5, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 5 * dy1
-            trace_loc_dark[6, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 6 * dy1
-            trace_loc_dark[7, order_id, :] = trace_loc[0, order_id, :] + 1.5 * dy2 - 7 * dy1
+            trace_loc_dark[0, order_id, :]=trace_loc[0, order_id, :]+1*dy2+dy1+2*dy1
+            trace_loc_dark[1, order_id, :]=trace_loc[1, order_id, :]+1*dy2+dy1+3*dy1
+            trace_loc_dark[2, order_id, :]=trace_loc[2, order_id, :]+1*dy2+dy1+4*dy1
+            trace_loc_dark[3, order_id, :]=trace_loc[0, order_id, :]+1*dy2+dy2+2*dy1
+            trace_loc_dark[4, order_id, :]=trace_loc[1, order_id, :]+1*dy2+dy2+dy1+2*dy1
+            trace_loc_dark[5, order_id, :]=trace_loc[2, order_id, :]+1*dy2+dy2+2*dy1+2*dy1
         else:
-            trace_loc_dark[0, order_id, :] = trace_loc[0, order_id, :] - 3 * dy2 + 3 * dy1
-            trace_loc_dark[1, order_id, :] = trace_loc[1, order_id, :] - 3 * dy2 + 4 * dy1
-            trace_loc_dark[2, order_id, :] = trace_loc[2, order_id, :] - 3 * dy2 + 5 * dy1
-            trace_loc_dark[3, order_id, :] = trace_loc[3, order_id, :] - 3 * dy2 + 6 * dy1
-
-            trace_loc_dark[4, order_id, :] = trace_loc[0, order_id, :] - 2 * dy2 + 2 * dy1
-            trace_loc_dark[5, order_id, :] = trace_loc[1, order_id, :] - 2 * dy2 + 3 * dy1
-            trace_loc_dark[6, order_id, :] = trace_loc[2, order_id, :] - 2 * dy2 + 4 * dy1
-            trace_loc_dark[7, order_id, :] = trace_loc[3, order_id, :] - 2 * dy2 + 5 * dy1
+            trace_loc_dark[0, order_id, :]=trace_loc[0, order_id, :]-3*dy2+dy1+2*dy1
+            trace_loc_dark[1, order_id, :]=trace_loc[1, order_id, :]-3*dy2+dy1+3*dy1
+            trace_loc_dark[2, order_id, :]=trace_loc[2, order_id, :]-3*dy2+dy1+4*dy1
+            trace_loc_dark[3, order_id, :]=trace_loc[0, order_id, :]-3*dy2+dy2+2*dy1
+            trace_loc_dark[4, order_id, :]=trace_loc[1, order_id, :]-3*dy2+dy2+dy1+2*dy1
+            trace_loc_dark[5, order_id, :]=trace_loc[2, order_id, :]-3*dy2+dy2+2*dy1+2*dy1
 
     line_width_filename = glob(os.path.join(mydir,"calib","*_line_width_smooth.fits"))[0]
     hdulist = pyfits.open(line_width_filename)
     line_width = hdulist[0].data
     line_width[np.where(line_width==0)] = np.nan
-    line_width_slit = line_width
-    line_width_dark = np.concatenate([line_width,line_width],axis=0)
+    line_width_slit = np.concatenate([line_width,line_width],axis=0)
+    line_width_dark = line_width_slit
     print(line_width.shape)
 
     # plt.imshow(tracemask)
     # plt.show()
 
 
-    for filename in filelist:
-        out = os.path.join(mydir, os.path.basename(filename).replace(".fits","_fluxes.fits"))
+    # filelist = glob(os.path.join(mydir, "raw", "*0041*.fits"))
+    filelist = glob(os.path.join(mydir, "raw", "*.fits"))
+    # filelist = filelist[5::]
 
+    for filename in filelist:
         hdulist = pyfits.open(filename)
         im = hdulist[0].data.T[:,::-1]
         header = hdulist[0].header
-        if tint != 0 and \
-                (tint != float(header["TRUITIME"])>1 or coadds != int(header["COADDS"])):
-            raise Exception("bad tint {0} or coadds {1}, should be {2} and {3}: ".format(float(header["TRUITIME"]),int(header["COADDS"]),tint,coadds) + filename)
+        if tint != 0 and tint != int(header["ITIME"]):
+            raise Exception("bad tint {0}, should be {1}: ".format(int(header["ITIME"]),tint) + filename)
         hdulist.close()
 
         if addbaryrv:
@@ -252,21 +205,18 @@ if __name__ == "__main__":
         # where_finite = np.where(np.isfinite(cp_im))
         # print(np.nansum(cp_im[where_finite]*background[where_finite])/np.nansum(background[where_finite]**2))
         # exit()
-        if not no_background:
-            im_skysub = im-background#*np.nansum(cp_im[where_finite]*background[where_finite])/np.nansum(background[where_finite]**2)
-        else:
-            im_skysub = copy(im)
+        im_skysub = im-background#*np.nansum(cp_im[where_finite]*background[where_finite])/np.nansum(background[where_finite]**2)
         badpixmap = persisbadpixmap#*get_badpixmap_from_laplacian(im_skysub,bad_pixel_fraction=1e-2)
 
         # plt.figure(1)
         # plt.imshow(im,origin="lower")
         # plt.clim([50,200])
-        # for order_id in [0]:#range(9):
-        #     for fib in range(trace_loc.shape[0]):
+        # for order_id in range(9):
+        #     for fib in range(3):
         #         plt.plot(trace_loc[fib, order_id, :], label="fibers", color="cyan",linestyle="--",linewidth=3)
-        #     for fib in np.arange(0,trace_loc_slit.shape[0]):
+        #     for fib in np.arange(0,6):
         #         plt.plot(trace_loc_slit[fib, order_id, :], label="background", color="red",linestyle="-.",linewidth=3)
-        #     for fib in np.arange(0,trace_loc_dark.shape[0]):
+        #     for fib in np.arange(0,6):
         #         plt.plot(trace_loc_dark[fib, order_id, :], label="dark", color="white",linestyle=":",linewidth=3)
         # plt.show()
 
@@ -301,7 +251,7 @@ if __name__ == "__main__":
         hdulist.close()
 
 
-        for fib in range(trace_loc.shape[0]):
+        for fib in range(3):
             plt.figure(1+fib)
             for order_id in range(9):
                 plt.subplot(9, 1, 9-order_id)
