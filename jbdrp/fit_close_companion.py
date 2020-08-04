@@ -279,10 +279,10 @@ def _fitRV(paras):
                 logpostout[data_id, rv_id] = -0.5 * logdet_Sigma - 0.5 * slogdet_icovphi0[1] - 0.5 * (
                             Npixs_HPFdata - np.size(HPFparas) + 2 - 1) * np.log(HPFchi2)
                 #
-                res_ccf = np.correlate(ravelresiduals/sigmas_vec,ravelresiduals/sigmas_vec,mode="same")
-                res_ccf_argmax = np.argmax(res_ccf)
-                plt.plot(res_ccf[(res_ccf_argmax-500):(res_ccf_argmax+500)]/np.max(res_ccf))
-                plt.show()
+                # res_ccf = np.correlate(ravelresiduals/sigmas_vec,ravelresiduals/sigmas_vec,mode="same")
+                # res_ccf_argmax = np.argmax(res_ccf)
+                # plt.plot(res_ccf[(res_ccf_argmax-500):(res_ccf_argmax+500)]/np.max(res_ccf))
+                # plt.show()
 
 
                 # # exit()

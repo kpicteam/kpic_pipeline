@@ -198,8 +198,8 @@ if __name__ == "__main__":
     fib = 1
     numthreads = 32
     # Combining oders 2M0746A 9 / np.sqrt(np.sum(1 / np.array([7, 8, 6, 7, 4, 4, 13.5, 7, 6]) ** 2))
-    selec_orders = [6]
-    # selec_orders = [5,6,7,8]
+    # selec_orders = [6]
+    selec_orders = [5,6,7,8]
     # selec_orders = [0,1,2,5,6,7,8]
     # selec_orders = [0,1,2,3,4,5,6,7,8]
     # selec_orders = [1,2,6,7,8]
@@ -234,8 +234,8 @@ if __name__ == "__main__":
         # A0_rv = 3 #km/s
         # A0dir = os.path.join(mykpicdir,"20200608_d_Sco")
         # A0dir = os.path.join(mykpicdir,"20200609_d_Sco")
-        A0dir = os.path.join(mykpicdir,"20200702_d_Sco")
-        # A0dir = os.path.join(mykpicdir,"20200703_d_Sco")
+        # A0dir = os.path.join(mykpicdir,"20200702_d_Sco")
+        A0dir = os.path.join(mykpicdir,"20200703_d_Sco")
         A0_rv = -13 #km/s
         # A0dir = os.path.join(mykpicdir,"20200702_15_Sgr")
         # A0_rv = -6 #km/s
@@ -274,12 +274,12 @@ if __name__ == "__main__":
         # sciencedir = os.path.join(mykpicdir,"20200609_HIP_81497")
         # sciencedir = os.path.join(mykpicdir,"20200609_ROXs_12B")
         # sciencedir = os.path.join(mykpicdir,"20200701_ROXs_42Bb")
-        sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42Bb")
+        # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42Bb")
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42B")
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42B_daytime") #[ 15.93993899 305.19731602  15.53791296  14.55284422]
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42B_fit") #[ 14.45913059 304.17032175  14.0525108   13.23600295]
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42B_chopping") #[ 71.24556938 316.18770182 167.29706758  59.05578673]
-        # sciencedir = os.path.join(mykpicdir,"20200703_ROXs_12B")
+        sciencedir = os.path.join(mykpicdir,"20200703_ROXs_12B")
         # sciencedir = os.path.join(mykpicdir,"20200703_ROXs_12B_chopping")
         filelist = glob(os.path.join(sciencedir, "*fluxes.fits"))
         filelist.sort()
@@ -708,25 +708,34 @@ if __name__ == "__main__":
                 hdulist.append(pyfits.ImageHDU(data=logpostout))
                 hdulist.append(pyfits.ImageHDU(data=vsini_list))
                 hdulist.append(pyfits.ImageHDU(data=rv_list))
+
+                order_suffix = ""
+                for myorder in selec_orders:
+                    order_suffix += "_{0}".format(myorder)
+
                 if combined:
                     if not os.path.exists(os.path.join(sciencedir, "out")):
                         os.makedirs(os.path.join(sciencedir, "out"))
-                    out = os.path.join(sciencedir, "out","flux_and_posterior.fits")
+                    out = os.path.join(sciencedir, "out", "flux_and_posterior"+order_suffix+".fits")
                 else:
                     if not os.path.exists(os.path.join(os.path.dirname(sciencefilename), "out")):
                         os.makedirs(os.path.join(os.path.dirname(sciencefilename), "out"))
-                    out = os.path.join(os.path.dirname(sciencefilename), "out",os.path.basename(sciencefilename).replace(".fits","_flux_and_posterior.fits"))
+                    out = os.path.join(os.path.dirname(sciencefilename), "out",os.path.basename(sciencefilename).replace(".fits","_flux_and_posterior"+order_suffix+".fits"))
                 try:
                     hdulist.writeto(out, overwrite=True)
                 except TypeError:
                     hdulist.writeto(out, clobber=True)
                 hdulist.close()
     else:
+        order_suffix = ""
+        for myorder in selec_orders:
+            order_suffix += "_{0}".format(myorder)
         if combined:
-            out = os.path.join(sciencedir, "out", "flux_and_posterior.fits")
+            out = os.path.join(sciencedir, "out", "flux_and_posterior"+order_suffix+".fits")
         else:
             raise (Exception())
             # out = os.path.join(os.path.dirname(sciencefilename), "out",os.path.basename(sciencefilename).replace(".fits","_flux_and_posterior.fits"))
+
         with pyfits.open(out) as hdulist:
             fluxout = hdulist[0].data
             dAICout = hdulist[1].data
