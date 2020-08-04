@@ -18,4 +18,3 @@ master_bkgds,badpixmaps,smoothed_thermal_noises,unique_tint,unique_coadds = back
 # For a single tint/number of coadds
 master_bkgd, smoothed_thermal_noise, badpixmap = backgrounds.make_badpixmap(filelist,plot=False) # does not save automatically
 save_bkgd_badpix(master_bkgd,badpixmap,smoothed_thermal_noise,header=fits.getheader(filelist[0]),readnoisebar=False)
-

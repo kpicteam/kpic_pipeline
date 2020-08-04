@@ -5,7 +5,7 @@ from astropy.stats import mad_std
 from scipy.interpolate import interp1d
 from scipy.ndimage.filters import convolve
 
-import logging 
+import logging
 # Display progress logs on stdout
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
