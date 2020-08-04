@@ -201,28 +201,54 @@ def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_templ
     return loglikes
 
 
-def lsqr_fit(guess, orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses):
-
-    orders = [6]
+def lsqr_fit(guess, orders, orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses):
                    
-    data_continuum = ndi.median_filter(orders_fluxes[orders], 100)
-    norm_data = orders_fluxes[orders] - data_continuum + np.nanmedian(data_continuum)
-    norm_errs = orders_fluxerrs[orders] #/ data_continuum
+    all_norm_data = []
+    all_norm_errs = []
+
+    # normalize the data
+    for data, errs in zip(orders_fluxes[orders], orders_fluxerrs[orders]):
+        data_continuum = ndi.median_filter(data, 100)
+        norm_data = data - data_continuum + np.nanmedian(data_continuum)
+        norm_errs = errs #/ data_continuum
+
+        all_norm_data.append(norm_data)
+        all_norm_errs.append(norm_errs)
 
     def cost_function(fitparams):
-        shift, vsini, contrast, star_flux = fitparams
+        shift, vsini, = fitparams[0:2]
+
+        all_diffs = []
+        broad_model = pyasl.rotBroad(template_wvs, template_fluxes, 0.1, vsini)
 
 
-        model_orders = generate_forward_model_singleorder(fitparams, orders_wvs[orders], star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses[orders])
 
-        model_continuum = ndi.median_filter(model_orders, 100)
-        norm_model = model_orders - model_continuum + np.nanmedian(model_continuum)
+        for i, order in enumerate(orders):
+            contrast, star_flux = fitparams[2*i+2:2*i+4]
 
-        diff = (norm_model - norm_data)/norm_errs
+            this_fitparams = [shift, vsini, contrast, star_flux]
+
+            model_orders = generate_forward_model_singleorder(this_fitparams, orders_wvs[order], star_wvs, star_template_fluxes, template_wvs, broad_model, orders_responses[order], broadened=True)
+
+            model_continuum = ndi.median_filter(model_orders, 100)
+            norm_model = model_orders - model_continuum + np.nanmedian(model_continuum)
+
+            norm_data = all_norm_data[i]
+            norm_errs = all_norm_errs[i]
+
+            diff = (norm_model - norm_data)/norm_errs
+            all_diffs = np.append(all_diffs, diff[np.where(~np.isnan(diff))])
         
-        return diff[np.where(~np.isnan(diff))]
+        return all_diffs
 
-    result = optimize.least_squares(cost_function, guess, bounds=((-150, 0, 0, 0), (150, 20, np.inf, np.inf)))
+    bounds_lower = [-150 , 0]
+    bounds_upper = [150, 100]
+    for i in range(len(orders)):
+        bounds_lower += [0, 0]
+        bounds_upper += [np.inf, np.inf]
+        guess += [10, 100]
+
+    result = optimize.least_squares(cost_function, guess, bounds=(bounds_lower, bounds_upper))
 
     return result
 
