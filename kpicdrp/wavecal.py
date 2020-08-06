@@ -62,7 +62,7 @@ def save_atrangrid(filelist_atran,line_width_func,atrangridname,mypool=None):
         hdulist.writeto(atrangridname, clobber=True)
     hdulist.close()
 
-def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv):
+def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv,fringing):
     c_kms = 299792.458
     wvs_coefs = paras[0:N_nodes_wvs]
     sig = 1
@@ -95,6 +95,10 @@ def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_int
 
     M = np.zeros((np.size(x),(blaze_chunks+1)))
     tmp = star_func(wvs*(1-star_rv/c_kms))*tel_func(wvs)
+    if fringing:
+        F = paras[-1]
+        delta = (2*np.pi)/wvs*paras[-2]
+        tmp *= 1/(1+F*np.sin(delta/2)**2)
     M0_mn = np.nanmean(tmp)
     tmp /= M0_mn
     x_knots = x[np.linspace(0,len(x)-1,blaze_chunks+1,endpoint=True).astype(np.int)]
@@ -132,8 +136,8 @@ def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_int
     except:
         return None
 
-def wavcal_nloglike(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv):
-    m = wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv)
+def wavcal_nloglike(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv,fringing):
+    m = wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv,fringing)
     if m is not None:
         nloglike = np.nansum((spectrum - m) ** 2 / (spec_err) ** 2)
         return 1 / 2. * nloglike
@@ -142,7 +146,7 @@ def wavcal_nloglike(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_
 
 def _fit_wavecal(paras):
     x,wvs0,spectrum,spec_err, star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv,\
-        init_grid_search,init_grid_dwv = paras
+        init_grid_search,init_grid_dwv,fringing = paras
     dwv = 3*(wvs0[np.size(wvs0)//2]-wvs0[np.size(wvs0)//2-1])
 
     ## pre optimization with grid search and smaller dimensional space
@@ -161,7 +165,10 @@ def _fit_wavecal(paras):
             for l, wv_mid in enumerate(wvs_mid):
                 for l2, wv_mid2 in enumerate(wvs_mid2):
                     for m, wv_max in enumerate(wvs_max):
-                        nloglike_arr[k,l,l2,m] = wavcal_nloglike([wv_min,wv_mid,wv_mid2,wv_max,1000,25], x, spectrum, spec_err, star_func, telluric_wvs, telluric_interpgrid, tmp_deg_wvs, blaze_chunks,False,rv)
+                        nloglike_arr[k,l,l2,m] = wavcal_nloglike([wv_min,wv_mid,wv_mid2,wv_max,1000,25], x,
+                                                                 spectrum, spec_err, star_func, telluric_wvs,
+                                                                 telluric_interpgrid, tmp_deg_wvs, blaze_chunks,
+                                                                 False,rv,False)
         argmin2d = np.unravel_index(np.argmin(nloglike_arr),nloglike_arr.shape)
 
         spl = InterpolatedUnivariateSpline(x_knots, [wvs_min[argmin2d[0]], wvs_mid[argmin2d[1]], wvs_mid2[argmin2d[2]],
@@ -172,30 +179,29 @@ def _fit_wavecal(paras):
 
     ## Real initialization
     x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(np.int)]
+    paras0 = wvs00[x_knots].tolist()
+    simplex_init_steps = [dwv/4,]*len(paras0)
     if fitsrv:
-        paras0 = np.array(wvs00[x_knots].tolist() + [rv,1000,25])
-    else:
-        paras0 = np.array(wvs00[x_knots].tolist() + [1000,25])
-    simplex_init_steps =  np.ones(np.size(paras0))
-    simplex_init_steps[0:N_nodes_wvs] = dwv/4
-    if fitsrv:
-        simplex_init_steps[N_nodes_wvs] = 1
-        simplex_init_steps[N_nodes_wvs+1] = 200
-        simplex_init_steps[N_nodes_wvs+2] = 10
-    else:
-        simplex_init_steps[N_nodes_wvs] = 200
-        simplex_init_steps[N_nodes_wvs+1] = 10
+        paras0 = paras0 + [rv,]
+        simplex_init_steps = simplex_init_steps + [1,]
+    paras0 = paras0 + [1000, 25]
+    simplex_init_steps = simplex_init_steps + [200,10]
+    if fringing:
+        paras0 = paras0 + [10852.852852852853,0.06606606606606608]
+        simplex_init_steps = simplex_init_steps + [10,0.001]
+
+    paras0 = np.array(paras0)
     initial_simplex = np.concatenate([paras0[None,:],paras0[None,:] + np.diag(simplex_init_steps)],axis=0)
-    res = minimize(lambda paras: wavcal_nloglike(paras, x,spectrum,spec_err,star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv), paras0, method="nelder-mead",
-                           options={"xatol": 1e-10, "maxiter": 1e5,"initial_simplex":initial_simplex,"disp":False})
+
+    res = minimize(lambda paras: wavcal_nloglike(paras, x,spectrum,spec_err,star_func,telluric_wvs,telluric_interpgrid,N_nodes_wvs,blaze_chunks,fitsrv,rv,fringing), paras0, method="nelder-mead",
+                           options={"xatol": 1e-6, "maxiter": 1e5,"initial_simplex":initial_simplex,"disp":False})
     out = res.x
 
     spl = InterpolatedUnivariateSpline(x_knots, out[0:N_nodes_wvs], k=3, ext=0)
     return spl(x),out,x_knots
 
-
 def fit_wavecal_fib(init_wvs,combined_spec,combined_err,star_func,star_rv, telluric_wvs, telluric_interpgrid,
-                    N_nodes_wvs=5, blaze_chunks=5,init_grid_search=False,init_grid_dwv=3e-4,mypool = None):
+                    N_nodes_wvs=5, blaze_chunks=5,init_grid_search=False,init_grid_dwv=3e-4,fringing = False,mypool = None):
     """
     Args:
 
@@ -213,34 +219,19 @@ def fit_wavecal_fib(init_wvs,combined_spec,combined_err,star_func,star_rv, tellu
     new_wvs_arr = np.zeros(init_wvs.shape)
     x = np.arange(0,2048)
     fitsrv = False
-    if fitsrv:
-        out_paras = np.zeros((combined_spec.shape[0],N_nodes_wvs+3))
-    else:
-        out_paras = np.zeros((combined_spec.shape[0],N_nodes_wvs+2))
+    out_paras = np.zeros((combined_spec.shape[0],N_nodes_wvs+1*fitsrv+2*fringing+2))
 
     if mypool is None: # jump
         for l in range(combined_spec.shape[0]):
-        # for l in [6]:
             spectrum = combined_spec[l,:]
             spec_err = combined_spec_clip[l,:]
 
             wvs0 = init_wvs[l,:]
 
             new_wvs, out, x_knots = _fit_wavecal((x, wvs0, spectrum, spec_err, star_func, telluric_wvs,telluric_interpgrid,
-                                                  N_nodes_wvs, blaze_chunks, fitsrv,star_rv,init_grid_search,init_grid_dwv))
+                                                  N_nodes_wvs, blaze_chunks, fitsrv,star_rv,init_grid_search,init_grid_dwv,fringing))
             new_wvs_arr[l,:] = new_wvs
             out_paras[l,:] = out
-
-        #     print(out)
-        #     import matplotlib.pyplot as plt
-        #     plt.figure(l+1)
-        #     plt.plot(x, spectrum, label="data")
-        #     plt.fill_between(x, spectrum - spec_err, spectrum + spec_err, label="data err", alpha=0.5)
-        #     plt.plot(x, wavcal_model(out, x, spectrum, spec_err, star_func, telluric_wvs,telluric_interpgrid,
-        #                                   N_nodes_wvs, blaze_chunks, fitsrv, star_rv), label="model")
-        #     plt.legend()
-        # plt.show()
-        # exit()
     else:
         outputs_list = mypool.map(_fit_wavecal, zip(itertools.repeat(x),
                                                     init_wvs, combined_spec, combined_err,
@@ -252,7 +243,8 @@ def fit_wavecal_fib(init_wvs,combined_spec,combined_err,star_func,star_rv, tellu
                                                     itertools.repeat(fitsrv),
                                                     itertools.repeat(star_rv),
                                                     itertools.repeat(init_grid_search),
-                                                    itertools.repeat(init_grid_dwv)))
+                                                    itertools.repeat(init_grid_dwv),
+                                                    itertools.repeat(fringing)))
 
         for l, out in enumerate(outputs_list):
             new_wvs, out, x_knots = out
@@ -264,6 +256,6 @@ def fit_wavecal_fib(init_wvs,combined_spec,combined_err,star_func,star_rv, tellu
         spectrum = combined_spec[l,:]
         spec_err = copy(combined_spec_clip[l,:])
         model[l,:] = wavcal_model(out_paras[l,:], x, spectrum, spec_err, star_func, telluric_wvs,telluric_interpgrid,
-                                      N_nodes_wvs, blaze_chunks, fitsrv, star_rv)
+                                      N_nodes_wvs, blaze_chunks, fitsrv, star_rv,fringing)
 
     return new_wvs_arr,model,out_paras

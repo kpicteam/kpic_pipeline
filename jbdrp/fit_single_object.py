@@ -11,11 +11,11 @@ import multiprocessing as mp
 from scipy.optimize import minimize
 import itertools
 import pandas as pd
-from wavcal import convolve_spectrum_line_width,convolve_spectrum_pixel_width
+from jbdrp.wavcal import convolve_spectrum_line_width,convolve_spectrum_pixel_width
 from scipy.interpolate import interp1d
-from utils_2020.badpix import *
-from utils_2020.misc import *
-from utils_2020.spectra import *
+from jbdrp.utils_2020.badpix import *
+from jbdrp.utils_2020.misc import *
+from jbdrp.utils_2020.spectra import *
 from scipy import interpolate
 from PyAstronomy import pyasl
 import csv

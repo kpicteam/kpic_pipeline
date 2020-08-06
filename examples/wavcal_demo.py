@@ -43,9 +43,6 @@ if __name__ == "__main__":
     except:
         pass
 
-    numthreads = 10
-    mypool = mp.Pool(processes=numthreads)
-    # mypool = None
 
     ## Change local directory
     kpicpublicdir = "/scr3/jruffio/data/kpic/public_kpic_data/"
@@ -63,8 +60,12 @@ if __name__ == "__main__":
     target_rv = -55.567 #km/s
     N_nodes_wvs=6 # Number of spline nodes for the wavelength solution
     blaze_chunks=5 # Number of chunks of the "blaze profile" (modeled as a piecewise linear function)
-    init_grid_search = True # do a rough grid search of the wavcal before running optimizer
+    init_grid_search = False # do a rough grid search of the wavcal before running optimizer
     init_grid_dwv = 1e-4#3e-4 #mircrons, how far to go for the grid search. Caution: It can take quite a while!
+    fringing = False
+    numthreads = 10
+    mypool = mp.Pool(processes=numthreads)
+    # mypool = None
 
     # Read an old wavelength array to be used as the first guess
     hdulist = fits.open(filename_oldwvs)
@@ -96,6 +97,7 @@ if __name__ == "__main__":
 
         # broaden and create interpolation function for the Phoenix model
         phoenix_line_widths = np.array(pd.DataFrame(line_width_func_list[fib](phoenix_wvs)).interpolate(method="linear").fillna(method="bfill").fillna(method="ffill"))[:, 0]
+        print("broaden Phoenix model")
         phoenix_conv = convolve_spectrum_line_width(phoenix_wvs, phoenix_spec, phoenix_line_widths, mypool=mypool)
         ##
         phoenix_func = interp1d(phoenix_wvs, phoenix_conv / np.nanmax(phoenix_conv), bounds_error=False,fill_value=np.nan)
@@ -116,15 +118,18 @@ if __name__ == "__main__":
         atran_wvs =  hdulist[3].data
         hdulist.close()
         ##
+        print("atran grid interpolator")
         atran_interpgrid = RegularGridInterpolator((water_unique,angle_unique),atran_grid,method="linear",bounds_error=False,fill_value=0.0)
 
         # Derive wavecal for a single fiber
+        print("start fitting")
         new_wvs_fib,model,out_paras = fit_wavecal_fib(old_wvs[fib,:,:],combined_spec[fib,:,:],combined_err[fib,:,:],
                                                      phoenix_func,star_rv,atran_wvs,atran_interpgrid,
                                                      N_nodes_wvs=N_nodes_wvs,
                                                      blaze_chunks=blaze_chunks,
                                                      init_grid_search = init_grid_search,
                                                      init_grid_dwv = init_grid_dwv,
+                                                     fringing=fringing,
                                                      mypool=mypool)
         new_wvs_arr[fib,:,:] = new_wvs_fib
 
@@ -145,3 +150,37 @@ if __name__ == "__main__":
     hdulist.close()
 
     plt.show()
+
+    # if 0: # fringing test
+    #     wvs00 = old_wvs[2,4,:]
+    #     spec = combined_spec[2,4,:]
+    #     spec = edges2nans(spec)
+    #     spec / np.nanmax(spec)
+    #     from jbdrp.fit_single_object import LPFvsHPF
+    #
+    #     spec_lpf = LPFvsHPF(spec,10)[0]
+    #
+    #     F_vec,G_vec = np.linspace(0.04,0.10,1000),np.linspace(1.00e4,1.2e4,1000)
+    #     chi2 = np.zeros((np.size(F_vec),np.size(G_vec)))
+    #     for Fid,F in enumerate(F_vec):
+    #         for Gid,G in enumerate(G_vec):
+    #             delta = (2*np.pi)/wvs00*G
+    #             m3 = 1/(1+F*np.sin(delta)**2)*spec_lpf
+    #             m3  = m3*np.nansum(spec*m3)/np.nansum(m3**2)
+    #             chi2[Fid,Gid] = np.nansum((spec-m3)**2)
+    #     myargmin = np.unravel_index(np.argmin(chi2),chi2.shape)
+    #     print(myargmin)
+    #     print(F_vec[myargmin[0]],G_vec[myargmin[1]])
+    #     # (439, 426)
+    #     # 0.06636636636636636 10852.852852852853
+    #     plt.figure(1)
+    #     plt.imshow(chi2,origin="lower")
+    #     # plt.imshow(chi2,origin="lower",extent=[G_vec[0],G_vec[-1],F_vec[0],F_vec[-1]],aspect=(G_vec[-1]-G_vec[0])/(F_vec[-1]-F_vec[0]))
+    #     plt.figure(2)
+    #     delta = (2*np.pi)/wvs00*G_vec[myargmin[1]]
+    #     m3 = 1/(1+F_vec[myargmin[0]]*np.sin(delta)**2)*spec_lpf
+    #     m3  = m3*np.nansum(spec*m3)/np.nansum(m3**2)
+    #     plt.plot(m3)
+    #     plt.plot(spec)
+    #     plt.plot(spec-m3)
+    #     plt.show()
