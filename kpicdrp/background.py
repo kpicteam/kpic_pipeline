@@ -146,13 +146,13 @@ def process_backgrounds(filelist,plot=False,save_loc=None):
                 plt.show()
 
             if save_loc is not None:
-                save_bkgd_badpix(background_med,persistent_badpix,smoothed_thermal_noise,header_list[where_tint[0][0]],readnoisebar=False)
+                save_bkgd_badpix(save_loc,background_med,persistent_badpix,smoothed_thermal_noise,header_list[where_tint[0][0]],readnoisebar=False)
 
                 
 
     return(background_meds,persistent_badpixs,smoothed_thermal_noises,unique_tint,unique_coadds)
 
-def save_bkgd_badpix(master_bkgd,badpixmap,smoothed_thermal_noise,header,readnoisebar=False):
+def save_bkgd_badpix(save_loc,master_bkgd,badpixmap,smoothed_thermal_noise,header,readnoisebar=False):
     tint = float(header["TRUITIME"])
     coadds = int(header["COADDS"])
 
