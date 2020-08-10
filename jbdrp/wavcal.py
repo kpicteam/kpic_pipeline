@@ -14,9 +14,9 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from scipy.interpolate import interp2d
 from scipy.interpolate import InterpolatedUnivariateSpline
-from utils.badpix import *
-from utils.misc import *
-from utils.spectra import *
+from jbdrp.utils.badpix import *
+from jbdrp.utils.misc import *
+from jbdrp.utils.spectra import *
 
 def wavcal_model_poly(paras, x,spectrum,spec_err,instr_trans, phoenix_HR8799_func,atran_2d_func,deg_wvs,deg_cont,fitsrv,rv):
     c_kms = 299792.458
