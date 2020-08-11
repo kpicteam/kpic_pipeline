@@ -11,63 +11,6 @@ from astropy.coordinates import SkyCoord
 
 gain = 2.85 # e-/ADU
 
-def process_bkgds(filelist, detect_cosmics=True):
-    """
-    Makes a master bkgd frame from a series of background frames
-
-    Args:
-        filelist: list of filenames to read in
-    Returns:
-        master_bkgd: the combined background frame
-        bkgd_noise: the noise associated with each pixel 
-        bkgd_frames: the indivudal frames after badpix and cosmic ray rejection
-    """
-    master_bkgd = []
-
-    for filename in filelist:
-        with fits.open(filename) as hdulist:
-            bkgd = np.copy(hdulist[0].data)
-            
-            if detect_cosmics:
-                crmap, _ = astroscrappy.detect_cosmics(bkgd)
-                bkgd[crmap] = np.nan
-            
-            master_bkgd.append(bkgd)
-        hdulist.close()
-
-    bkgd_frames = master_bkgd
-    bkgd_noise = np.nanstd(master_bkgd, axis=0)
-    master_bkgd = np.nanmean(master_bkgd, axis=0)
-
-    badpixmap = np.zeros(master_bkgd.shape)
-    badpixmap[np.where(np.isnan(master_bkgd))] = 1
-    
-    for i in range(2):
-        smoothed_thermal_noise = ndi.median_filter(bkgd_noise, 3)
-        smoothed_thermal_noise_percolumn = np.nanmedian(smoothed_thermal_noise, axis=0)
-        smoothed_thermal_noise_percolumn_2d = np.ones(bkgd_noise.shape) * smoothed_thermal_noise_percolumn[None, :]
-
-        smoothed_thermal_noise[np.where(badpixmap == 1)] = smoothed_thermal_noise_percolumn_2d[np.where(badpixmap == 1)]
-
-        master_bkgd_smooth = ndi.median_filter(master_bkgd, 7)
-
-        # radius = 3
-        # mean = ndi.uniform_filter(master_dark, radius*2, mode='constant', origin=-radius)
-        # c2 = ndi.uniform_filter(master_dark*master_dark, radius*2, mode='constant', origin=-radius)
-        # master_dark_std = ((c2 - mean*mean)**.5)
-        badpixmap[np.where( (np.abs(master_bkgd - master_bkgd_smooth) > 6 * smoothed_thermal_noise/np.sqrt(12)) | (master_bkgd > 1000)) ] = 1
-
-        badpix = np.where(badpixmap == 1)
-
-        master_bkgd[badpix] = np.nan
-        bkgd_noise[badpix] = np.nan
-
-    smoothed_thermal_noise_percolumn = np.nanmedian(smoothed_thermal_noise, axis=0)
-    smoothed_thermal_noise_percolumn_2d = np.ones(bkgd_noise.shape) * smoothed_thermal_noise_percolumn[None, :]
-    bad_thermal = np.where(np.isnan(smoothed_thermal_noise))
-    smoothed_thermal_noise[bad_thermal] = smoothed_thermal_noise_percolumn_2d[bad_thermal]
-
-    return master_bkgd, smoothed_thermal_noise, badpixmap
 
 def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
     """
@@ -84,12 +27,13 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
     for filename in filelist:
         with fits.open(filename) as hdulist:
             dat = np.copy(hdulist[0].data)
+            dat = np.rot90(dat, -1)
             dat -= bkgd
             
             if detect_cosmics:
                 dat_crmap, corr_dat = astroscrappy.detect_cosmics(dat, inmask=badpixmap)
                 dat[dat_crmap] = np.nan
-            dat[np.where(badpixmap == 1)] = np.nan
+            dat[np.where(np.isnan(badpixmap))] = np.nan
             
             sci_data.append(dat)
         hdulist.close()
@@ -125,7 +69,7 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     noise = noise[good]
     initial_flux = np.sum(good_slice * g(good_coords))/np.sum(g(good_coords)*g(good_coords))
     
-    good_var = (initial_flux * g(good_coords) + noise**2)/gain
+    good_var = (initial_flux * g(good_coords))/gain + noise**2
     flux = np.sum(good_slice * g(good_coords) / good_var)/np.sum(g(good_coords)*g(good_coords)/good_var)
     residuals = flux * g(good_coords) - good_slice
     max_res = np.nanmax(np.abs(residuals))
@@ -137,7 +81,7 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     #if np.isnan(flux):
     #    import pdb; pdb.set_trace()
     
-    return flux, badpixmetric
+    return flux, max_res
 
 
 def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background):
@@ -182,7 +126,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         else:
             bkgd_level = 0
 
-
+        column_maxres = []
         for fiber in range(num_fibers):
             center = order_locs[fiber, x]
             sigma = order_widths[fiber, x]
@@ -193,13 +137,27 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             ys = np.arange(center_int-6, center_int+6+1)
             noise = img_noise[center_int-6:center_int+6+1, x]
 
-            flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
+            #flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
+            flux, maxres = extract_1d(ys, dat_slice, center, sigma, noise)
+            column_maxres.append(maxres)
             fluxes[fiber, x] = flux
             # account for the fact we are doing total integrated flux of Gaussian when computing the noise
             fluxerr = np.sqrt(gain*flux + (bkgd_noise * np.sqrt(2*np.pi) * sigma)**2 ) 
             fluxerrs[fiber, x] = fluxerr
-            
-            badpixmetrics[fiber, x] = badpixmetric
+        column_maxres = np.array(column_maxres)    
+        
+        ymin_long = int(np.round(np.min(order_locs[:, x]))) - 6
+        ymax_long = int(np.round(np.max(order_locs[:, x]))) + 6 + 1
+        ys_long = np.arange(ymin_long, ymax_long)
+        long_slice = img_column[ymin_long:ymax_long] - bkgd_level
+        for fiber in range(num_fibers):
+            sigma = order_widths[fiber, x]
+            peakflux = fluxes[fiber, x]/(np.sqrt(2*np.pi) * sigma)
+            g = models.Gaussian1D(amplitude=peakflux, mean=order_locs[fiber, x], stddev=sigma)
+            long_slice -= g(ys_long)
+        
+        these_badmetrics = column_maxres/np.nanstd(long_slice)
+        badpixmetrics[:, x] = these_badmetrics
 
     return fluxes, fluxerrs, badpixmetrics
         
