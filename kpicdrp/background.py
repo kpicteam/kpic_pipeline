@@ -157,7 +157,7 @@ def save_bkgd_badpix(save_loc,master_bkgd,badpixmap,smoothed_thermal_noise,heade
     coadds = int(header["COADDS"])
 
     hdulist = fits.HDUList()
-    hdulist.append(fits.PrimaryHDU(data=master_bkgd,header=header)
+    hdulist.append(fits.PrimaryHDU(data=master_bkgd,header=header))
     hdulist.append(fits.ImageHDU(data=smoothed_thermal_noise))
     if readnoisebar:
         out = save_loc+"_background_med_tint{0}_coadds{1}.fits".format(tint,coadds)
@@ -170,7 +170,7 @@ def save_bkgd_badpix(save_loc,master_bkgd,badpixmap,smoothed_thermal_noise,heade
     hdulist.close()
 
     hdulist = fits.HDUList()
-    hdulist.append(fits.PrimaryHDU(data=badpixmap,header=header)
+    hdulist.append(fits.PrimaryHDU(data=badpixmap,header=header))
     if readnoisebar:
         out = save_loc+"_persistent_badpix_tint{0}_coadds{1}.fits".format(tint,coadds)
     else:
