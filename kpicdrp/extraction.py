@@ -28,13 +28,14 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
         with fits.open(filename) as hdulist:
             dat = np.copy(hdulist[0].data)
             dat = np.rot90(dat, -1)
-            dat -= bkgd
-            
+
             if detect_cosmics:
                 dat_crmap, corr_dat = astroscrappy.detect_cosmics(dat, inmask=badpixmap)
                 dat[dat_crmap] = np.nan
             dat[np.where(np.isnan(badpixmap))] = np.nan
-            
+
+            dat -= bkgd
+
             sci_data.append(dat)
         hdulist.close()
 
@@ -78,6 +79,11 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
 
     flux *= np.sqrt(2*np.pi) * sigma # total flux, not just peak flux
     
+    # if flux > 200:
+    #     import matplotlib.pylab as plt
+    #     plt.plot(good_coords, good_slice, 'o')
+    #     plt.show()
+    #     import pdb; pdb.set_trace()
     #if np.isnan(flux):
     #    import pdb; pdb.set_trace()
     
@@ -118,11 +124,14 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         for center in centers:
             center_int = int(np.round(center))
             bkgd_column[center_int-5:center_int+5+1] = np.nan 
-        bkgd_noise = np.nanstd(bkgd_column) # roughly the noise
+        ymin_long = int(np.round(np.min(order_locs[:, x]))) - 6
+        ymax_long = int(np.round(np.max(order_locs[:, x]))) + 6 + 1
+        bkgd_slice = bkgd_column[ymin_long:ymax_long]
+        bkgd_noise = np.nanstd(bkgd_slice) # roughly the noise
 
         if fit_background:
             # compute background as median of remaining pixels
-            bkgd_level = np.nanmedian(bkgd_column)
+            bkgd_level = np.nanmedian(bkgd_slice)
         else:
             bkgd_level = 0
 
@@ -137,8 +146,12 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             ys = np.arange(center_int-6, center_int+6+1)
             noise = img_noise[center_int-6:center_int+6+1, x]
 
-            #flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
-            flux, maxres = extract_1d(ys, dat_slice, center, sigma, noise)
+            if np.any(np.isnan(img_column[center_int-1:center_int+2])):
+                flux, maxres = np.nan, np.nan
+            else:
+                #flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
+                flux, maxres = extract_1d(ys, dat_slice, center, sigma, noise)
+
             column_maxres.append(maxres)
             fluxes[fiber, x] = flux
             # account for the fact we are doing total integrated flux of Gaussian when computing the noise
@@ -165,7 +178,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
 
 
 
-def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=None, img_hdr=None, fit_background=False, bad_pixel_fraction=0.01, pool=None):
+def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=None, img_hdr=None, fit_background=False, bad_pixel_fraction=0.0, pool=None):
     """
     Extracts the flux from the traces to make 1-D spectra. 
 
