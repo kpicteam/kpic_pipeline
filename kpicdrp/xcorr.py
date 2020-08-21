@@ -129,15 +129,17 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star
 
     template_wvs_starframe = template_wvs/(1+new_redshift) 
 
-    template = np.interp(template_wvs, template_wvs_starframe, broad_model)
-    template /= np.percentile(template, 90)
 
-    # broaden to instrumental resolution 
-    template = convolve_and_interp(thiswvs, order_sigmas, template_wvs, broad_model)
     # model_r = np.median(template_wvs/np.median(template_wvs - np.roll(template_wvs, 1)))
     # data_r = 35000
     # downsample = model_r/data_r/(2*np.sqrt(2*np.log(2)))
     # broad_model = ndi.gaussian_filter(broad_model, downsample)
+
+    template = np.interp(template_wvs_starframe, template_wvs, broad_model)
+    template /= np.percentile(template, 90)
+
+    # broaden to instrumental resolution 
+    template = convolve_and_interp(thiswvs, order_sigmas, template_wvs, template)
 
     resp_template = orders_responses
 
