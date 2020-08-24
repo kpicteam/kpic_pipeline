@@ -3,6 +3,9 @@ from copy import copy
 import astropy.io.fits as fits
 from scipy.interpolate import interp1d
 import itertools
+from astropy.coordinates import SkyCoord, EarthLocation
+import astropy.units as u
+import astropy.time as time
 
 def combine_stellar_spectra(spectra,errors,weights=None):
     """
@@ -145,3 +148,52 @@ def stellar_spectra_from_files(filelist):
         baryrv[fib] = np.mean(baryrv_list[np.where(fib == whichfiber)[0]])
         combined_spec[fib, :, :], combined_err[fib, :, :] = combine_stellar_spectra(spec_list, spec_sig_list)
     return combined_spec,combined_err,baryrv
+
+def get_avg_mjd_radec(filelist):
+    """
+    Returns the average MJD of the files, and the RA/Dec the telescope was pointing to
+
+    Args:
+        filelist: list of files
+    """
+    mjds = []
+    ras = []
+    decs = []
+
+    for filename in filelist:
+        with fits.open(filename) as hdulist:
+            utctime = hdulist[0].header['UTC']
+            date = hdulist[0].header['DATE-OBS']
+            ra = hdulist[0].header['RA']
+            dec = hdulist[0].header['Dec']
+
+            mjd = time.Time("{0}T{1}Z".format(date, utctime)).mjd
+
+            tel_coord = SkyCoord(ra, dec, unit=(u.hourangle, u.deg))
+
+            mjds.append(mjd)
+            ras.append(tel_coord.ra.degree)
+            decs.append(tel_coord.dec.degree)
+
+    return np.mean(mjds), np.mean(ras), np.mean(decs)
+
+
+keck = EarthLocation.from_geodetic(lat=19.8283*u.deg, lon=-155.4783*u.deg, height=4160*u.m)
+def compute_rel_vel(mjd, ra, dec, star_v):
+    """
+    Computes the relative velocity of the star relative to Earth during the time of observation
+    Args:
+        mjd: (float) time MJD
+        ra: RA in degrees
+        dec: Dec in degrees
+        star_v: star's radial velocity (km/s)
+    Return:
+        rel_v: (float) in km/s
+    """
+    sc = SkyCoord(ra=ra*u.deg, dec=dec*u.deg, )
+    barycorr = sc.radial_velocity_correction(obstime=time.Time(mjd, format='mjd', scale='utc'), location=keck)
+    print(barycorr.to(u.km/u.s).value )
+
+    rel_v = -barycorr.to(u.km/u.s).value + star_v # postiive is redshfit? 
+    
+    return rel_v

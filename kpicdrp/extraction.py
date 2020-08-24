@@ -549,31 +549,5 @@ def measure_tellurics(orders_fluxes, filter_size=500):
 
     return telluric_orders
 
-def get_avg_mjd_radec(filelist):
-    """
-    Returns the average MJD of the files, and the RA/Dec the telescope was pointing to
 
-    Args:
-        filelist: list of files
-    """
-    mjds = []
-    ras = []
-    decs = []
-
-    for filename in filelist:
-        with fits.open(filename) as hdulist:
-            utctime = hdulist[0].header['UTC']
-            date = hdulist[0].header['DATE-OBS']
-            ra = hdulist[0].header['RA']
-            dec = hdulist[0].header['Dec']
-
-            mjd = time.Time("{0}T{1}Z".format(date, utctime)).mjd
-
-            tel_coord = SkyCoord(ra, dec, unit=(u.hourangle, u.deg))
-
-            mjds.append(mjd)
-            ras.append(tel_coord.ra.degree)
-            decs.append(tel_coord.dec.degree)
-
-    return np.mean(mjds), np.mean(ras), np.mean(decs)
 
