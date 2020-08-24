@@ -139,7 +139,7 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star
     template /= np.percentile(template, 90)
 
     # broaden to instrumental resolution 
-    template = convolve_and_interp(thiswvs, order_sigmas, template_wvs, template)
+    template = convolve_and_sample(thiswvs, order_sigmas, template_wvs, template)
 
     resp_template = orders_responses
 
@@ -268,9 +268,9 @@ def lsqr_fit(guess, orders, orders_wvs, orders_sigmas, orders_fluxes, orders_flu
     return result
 
 
-def convolve_and_interp(wv_channels, sigmas, model_wvs, model_fluxes, channel_width=None, num_sigma=3):
+def convolve_and_sample(wv_channels, sigmas, model_wvs, model_fluxes, channel_width=None, num_sigma=3):
     """
-    Simulate the observations of a model. Convolves the model with a variable Gaussian LSF in each spectral channel.
+    Simulate the observations of a model. Convolves the model with a variable Gaussian LSF, sampled at each desired spectral channel.
 
     Args:
         wv_channels: the wavelengths desired (length of N_output)
