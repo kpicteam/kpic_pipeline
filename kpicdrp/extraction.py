@@ -20,10 +20,14 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
         filelist: list of science files to process
         bkgd: 2-D bkgd frame for subtraction
         badpixmap: 2-D bad pixel map
+    Output:
+        sci_data: stacked science frame
+        sci_noise: noise from std
     """
 
+    # list containing 1 or more frames
     sci_data = []
-
+    # iterate over images from the same fiber
     for filename in filelist:
         with fits.open(filename) as hdulist:
             dat = np.copy(hdulist[0].data)
@@ -34,16 +38,17 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
                 dat[dat_crmap] = np.nan
             dat[np.where(np.isnan(badpixmap))] = np.nan
 
+            # subtract background
             dat -= bkgd
 
             sci_data.append(dat)
         hdulist.close()
 
+    # take mean and std across different frames - JX: is the mean used later on?
     sci_noise = np.nanstd(sci_data, axis=0)
-    sci_frames = sci_data
-    sci_data = np.nanmean(sci_data, axis=0)
+    mean_sci_data = np.nanmean(sci_data, axis=0)
 
-    return sci_data, sci_noise, sci_frames
+    return mean_sci_data, sci_noise, sci_data
 
 
 def extract_1d(dat_coords, dat_slice, center, sigma, noise):
@@ -113,11 +118,12 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
     nx = order_locs.shape[1]
     num_fibers = order_locs.shape[0]
 
+    # iterate over chunk (size of 8 pixels)
+    # compute the background from where there are no fibers
+    # we'll use this for estimating the background, and estimate the noise in the flux extraction
     for x in range(nx):
+        # a single vertical column (y direction)
         img_column = image[:, x]
-
-        # compute the background from where there are no fibers
-        # we'll use this for estimating the background, and estimate the noise in the flux extraction
         centers = order_locs[:, x]
         bkgd_column = np.copy(img_column) # make a copy for masking the fibers
         # for each fiber, mask 11 pixels around it
@@ -142,10 +148,12 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             center_int = int(np.round(center))
 
             # take a slice of data and subtract the background
+            # JX: Why 6?
             dat_slice = img_column[center_int-6:center_int+6+1] - bkgd_level
             ys = np.arange(center_int-6, center_int+6+1)
             noise = img_noise[center_int-6:center_int+6+1, x]
 
+            # JX: when would this be nan? on bad pixels?
             if np.any(np.isnan(img_column[center_int-1:center_int+2])):
                 flux, maxres = np.nan, np.nan
             else:
@@ -155,7 +163,8 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             column_maxres.append(maxres)
             fluxes[fiber, x] = flux
             # account for the fact we are doing total integrated flux of Gaussian when computing the noise
-            fluxerr = np.sqrt(gain*flux + (bkgd_noise * np.sqrt(2*np.pi) * sigma)**2 ) 
+            # JX: sometimes flux is too negative and makes arg of sqrt negative, throwing Runtime warning
+            fluxerr = np.sqrt(gain*flux + (bkgd_noise * np.sqrt(2*np.pi) * sigma)**2 )
             fluxerrs[fiber, x] = fluxerr
         column_maxres = np.array(column_maxres)    
         
@@ -175,16 +184,14 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
     return fluxes, fluxerrs, badpixmetrics
         
 
-
-
-
-def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=None, img_hdr=None, fit_background=False, bad_pixel_fraction=0.0, pool=None):
+def extract_flux(image, output_filename, trace_locs, trace_widths,
+                 img_noise=None, img_hdr=None, fit_background=False, bad_pixel_fraction=0.0, pool=None):
     """
     Extracts the flux from the traces to make 1-D spectra. 
 
     Args:
         image: either 1) 2-D frame (Ny, Nx), or 2) filename of FITS file to 2-D frame
-        output_filename: path to file to save the data to
+        output_filename: path to output directory
         trace_locs: y-location of the fiber traces (N_fibers, N_orders, Nx)
         trace_widths: standard deviation widths of the fiber traces (N_fibers, N_orders, Nx)
         img_noise: optional frame that describes the noise in each pixel (Ny, Nx). Either 2-D array, or filename of FITS file
@@ -210,7 +217,7 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
             with fits.open(img_noise) as hdulist:
                 img_noise = hdulist[0].data
 
-    # output 
+    # output
     fluxes = np.zeros(trace_locs.shape)+np.nan
     errors = np.zeros(trace_locs.shape)+np.nan
     badpixmetric = np.zeros(trace_locs.shape)+np.nan
@@ -218,14 +225,17 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
     num_fibers = trace_locs.shape[0]
     num_orders = trace_locs.shape[1]
     nx = trace_locs.shape[2]
+    # break up image into chunks
     chunk_size = 8
     num_chunks = nx // 8
 
     pool_jobs = [] # for multiprocessing.Pool if needed
 
+    # iterate over each order
     for order in range(num_orders):
         order_locs = trace_locs[:, order]
         order_widths = trace_widths[:, order]
+        # go over each chunk within an order
         for chunk in range(num_chunks):
             c_start = chunk * chunk_size
             c_end = (chunk + 1) * chunk_size
@@ -235,18 +245,21 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
             noise_chunk = img_noise[:, c_start:c_end]
 
             if pool is None:
+                # extract flux from chunk
                 outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background)
                 fluxes[:, order, c_start:c_end] = outputs[0]
                 errors[:, order, c_start:c_end] = outputs[1]
                 badpixmetric[:, order, c_start:c_end] = outputs[2]
             else:
-                output = pool.apply_async(_extract_flux_chunk, (chunk_locs, chunk_widths, noise_chunk, fit_background))
+                output = pool.apply_async(_extract_flux_chunk,
+                            (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background))
                 pool_jobs.append((output, order, c_start, c_end))
     
     # for multiprocessing, need to retrieve outputs outputs
     if pool is not None:
         for job in pool_jobs:
-            outputs, order, c_start, c_end = job.get()
+            job_output, order, c_start, c_end = job
+            outputs = job_output.get()
             fluxes[:, order, c_start:c_end] = outputs[0]
             errors[:, order, c_start:c_end] = outputs[1]
             badpixmetric[:, order, c_start:c_end] = outputs[2]
@@ -281,10 +294,7 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
     hdulist = fits.HDUList([prihdu, exthdu])
     hdulist.writeto(output_filename, overwrite=True)
 
-
     return fluxes, errors
-
-
 
 
 
