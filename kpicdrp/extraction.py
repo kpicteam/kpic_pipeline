@@ -240,13 +240,14 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
                 errors[:, order, c_start:c_end] = outputs[1]
                 badpixmetric[:, order, c_start:c_end] = outputs[2]
             else:
-                output = pool.apply_async(_extract_flux_chunk, (chunk_locs, chunk_widths, noise_chunk, fit_background))
+                output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background))
                 pool_jobs.append((output, order, c_start, c_end))
     
     # for multiprocessing, need to retrieve outputs outputs
     if pool is not None:
         for job in pool_jobs:
-            outputs, order, c_start, c_end = job.get()
+            job_output, order, c_start, c_end = job
+            outputs = job_output.get()
             fluxes[:, order, c_start:c_end] = outputs[0]
             errors[:, order, c_start:c_end] = outputs[1]
             badpixmetric[:, order, c_start:c_end] = outputs[2]
