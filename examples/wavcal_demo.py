@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
 
     ## Change local directory
-    kpicpublicdir = "/scr3/jruffio/data/kpic/public_kpic_data/"
+    kpicpublicdir = "/Users/ashbake/Documents/Research/Projects/KPIC/data/public_kpic_data/"
 
     ## Path relative to the public kpic directory
     filelist_spectra = glob(os.path.join(kpicpublicdir, "20200702_HIP_81497", "*fluxes.fits"))
@@ -140,8 +140,8 @@ if __name__ == "__main__":
         print("Saving " + out_filename.replace(".fits","_f{0}.png".format(fib)))
         plt.savefig(out_filename.replace(".fits","_f{0}.png".format(fib)))
 
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=new_wvs_arr,header=fits.open(filelist_spectra[0])[0].header))
+    hdulist = fits.HDUList()
+    hdulist.append(fits.PrimaryHDU(data=new_wvs_arr,header=fits.open(filelist_spectra[0])[0].header))
     print("Saving "+ out_filename)
     try:
         hdulist.writeto(out_filename, overwrite=True)
