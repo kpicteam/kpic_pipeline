@@ -6,6 +6,8 @@ from scipy.interpolate import interp1d
 from scipy.ndimage.filters import convolve
 
 import logging
+import matplotlib.pyplot as plt
+
 # Display progress logs on stdout
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
@@ -80,7 +82,6 @@ def make_badpixmap(background_files,plot=False):
         background_badpix_cube.append(background_badpixmap)
 
         if plot:
-            import matplotlib.pyplot as plt
             plt.figure(2)
             plt.imshow(background*background_badpixmap,interpolation="nearest",origin="lower")
             med_val = np.nanmedian(background)
@@ -114,10 +115,9 @@ def process_backgrounds(filelist,plot=False,save_loc=None):
         tint_list.append(float(background_header["TRUITIME"]))
         coadds_list.append(int(background_header["COADDS"]))
         header_list.append(background_header)
-
     unique_tint = np.unique(tint_list)
     unique_coadds = np.unique(coadds_list)
-    
+    print(unique_tint, unique_coadds)
     background_meds = []
     persistent_badpixs = []
     smoothed_thermal_noises = []
@@ -138,8 +138,7 @@ def process_backgrounds(filelist,plot=False,save_loc=None):
             smoothed_thermal_noises.append(smoothed_thermal_noise)
 
             if plot:
-                import matplotlib.pyplot as plt
-                plt.figure(2)
+                plt.figure()
                 plt.imshow(background_med,interpolation="nearest",origin="lower")
                 med_val = np.nanmedian(background_med)
                 # plt.clim([0,2*med_val])
@@ -148,7 +147,6 @@ def process_backgrounds(filelist,plot=False,save_loc=None):
             if save_loc is not None:
                 save_bkgd_badpix(save_loc,background_med,persistent_badpix,smoothed_thermal_noise,header_list[where_tint[0][0]],readnoisebar=False)
 
-                
 
     return(background_meds,persistent_badpixs,smoothed_thermal_noises,unique_tint,unique_coadds)
 
