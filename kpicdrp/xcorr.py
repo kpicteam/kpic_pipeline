@@ -121,7 +121,7 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star
 
     thiswvs = orders_wvs
     star_template = np.interp(thiswvs, star_wvs, star_template_fluxes)
-    star_template /= np.percentile(star_template, 90)
+    star_template /= np.nanpercentile(star_template, 90)
 
 
     new_beta =(rvshift)/consts.c.to(u.km/u.s).value #+  (rel_v)/consts.c.to(u.km/u.s).value
@@ -136,7 +136,7 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star
     # broad_model = ndi.gaussian_filter(broad_model, downsample)
 
     template = np.interp(template_wvs_starframe, template_wvs, broad_model)
-    template /= np.percentile(template, 90)
+    template /= np.nanpercentile(template, 90)
 
     # broaden to instrumental resolution 
     template = convolve_and_sample(thiswvs, order_sigmas, template_wvs, template)

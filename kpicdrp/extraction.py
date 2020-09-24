@@ -20,9 +20,12 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
         filelist: list of science files to process
         bkgd: 2-D bkgd frame for subtraction
         badpixmap: 2-D bad pixel map
-    Output:
-        sci_data: stacked science frame
-        sci_noise: noise from std
+        detect_cosmics: boolean, if True, runs a cosmic ray rejection algorithm on each image
+
+    Returns:
+        sci_data: 2-D mean image of all the input science files
+        sci_noise: 2-D stddev map of all the input science files
+        sci_frames: array of all the 2-D images. Shape of (N_frames, y, x)
     """
 
     # list containing 1 or more frames
@@ -66,7 +69,7 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
         flux: total integrated flux assuming a Gaussian PSF (float)
         badpixmetric metric for how good of a flux estimate this is (float)
     """
-    g = models.Gaussian1D(amplitude=1, mean=center, stddev=sigma)
+    g = models.Gaussian1D(amplitude=1./np.sqrt(2*np.pi*sigma**2), mean=center, stddev=sigma)
     good = np.where(~np.isnan(dat_slice))
     if np.size(good) < 3:
         return np.nan, np.nan
@@ -76,14 +79,15 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     initial_flux = np.sum(good_slice * g(good_coords))/np.sum(g(good_coords)*g(good_coords))
     
     good_var = (initial_flux * g(good_coords))/gain + noise**2
+    bkgd_var = noise**2
     flux = np.sum(good_slice * g(good_coords) / good_var)/np.sum(g(good_coords)*g(good_coords)/good_var)
+    flux_err = np.sqrt(1./np.sum(g(good_coords)*g(good_coords)/good_var))
+    flux_err_bkgd_only = np.sqrt(1./np.sum(g(good_coords)*g(good_coords)/bkgd_var))
     residuals = flux * g(good_coords) - good_slice
     max_res = np.nanmax(np.abs(residuals))
     res_mad = np.nanmedian(np.abs(residuals - np.nanmedian(residuals)))
     badpixmetric = np.abs(max_res/res_mad)
 
-    flux *= np.sqrt(2*np.pi) * sigma # total flux, not just peak flux
-    
     # if flux > 200:
     #     import matplotlib.pylab as plt
     #     plt.plot(good_coords, good_slice, 'o')
@@ -92,7 +96,7 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     #if np.isnan(flux):
     #    import pdb; pdb.set_trace()
     
-    return flux, max_res
+    return flux, flux_err, flux_err_bkgd_only, max_res
 
 
 def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background):
@@ -108,11 +112,15 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
 
     Returns:
         fluxes: (N_fibers, Nx) extracted 1-D fluxes
-        errors: (N_fibers, Nx) errors for 1-D extracted fluxes
+        fluxerrs_extraction: (N_fibers, Nx) errors for 1-D extracted fluxes due to extraction
+        fluxerrs_bkgd_only: (N_fibers, Nx) background only component of the flux errors
+        fluxerrs_emperical: (N_fibers, Nx) emperical attempt to estimate flux errors
         badpixmetric: (N_fibers, Nx) metric for how bad a pixel is 
     """
     fluxes = np.zeros(order_locs.shape)+np.nan
-    fluxerrs = np.zeros(order_locs.shape)+np.nan
+    fluxerrs_extraction = np.zeros(order_locs.shape)+np.nan
+    fluxerrs_bkgd_only = np.zeros(order_locs.shape)+np.nan
+    fluxerrs_emperical = np.zeros(order_locs.shape)+np.nan
     badpixmetrics = np.zeros(order_locs.shape)+np.nan
     
     nx = order_locs.shape[1]
@@ -152,20 +160,23 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             dat_slice = img_column[center_int-6:center_int+6+1] - bkgd_level
             ys = np.arange(center_int-6, center_int+6+1)
             noise = img_noise[center_int-6:center_int+6+1, x]
+            noise[np.where(np.isnan(noise))] = bkgd_noise
 
             # JX: when would this be nan? on bad pixels?
             if np.any(np.isnan(img_column[center_int-1:center_int+2])):
-                flux, maxres = np.nan, np.nan
+                flux, flux_err_extraction, flux_err_bkgd_only, maxres = np.nan, np.nan, np.nan, np.nan
             else:
                 #flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
-                flux, maxres = extract_1d(ys, dat_slice, center, sigma, noise)
+                flux, flux_err_extraction, flux_err_bkgd_only, maxres = extract_1d(ys, dat_slice, center, sigma, noise)
 
             column_maxres.append(maxres)
             fluxes[fiber, x] = flux
             # account for the fact we are doing total integrated flux of Gaussian when computing the noise
             # JX: sometimes flux is too negative and makes arg of sqrt negative, throwing Runtime warning
-            fluxerr = np.sqrt(gain*flux + (bkgd_noise * np.sqrt(2*np.pi) * sigma)**2 )
-            fluxerrs[fiber, x] = fluxerr
+            fluxerr_emperical = np.sqrt(gain*flux + (bkgd_noise * np.sqrt(2*np.pi) * sigma)**2 )
+            fluxerrs_extraction[fiber, x] = flux_err_extraction
+            fluxerrs_bkgd_only[fiber, x] = flux_err_bkgd_only
+            fluxerrs_emperical[fiber, x] = fluxerr_emperical
         column_maxres = np.array(column_maxres)    
         
         ymin_long = int(np.round(np.min(order_locs[:, x]))) - 6
@@ -181,11 +192,11 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         these_badmetrics = column_maxres/np.nanstd(long_slice)
         badpixmetrics[:, x] = these_badmetrics
 
-    return fluxes, fluxerrs, badpixmetrics
+    return fluxes, fluxerrs_extraction, fluxerrs_bkgd_only, fluxerrs_emperical, badpixmetrics
         
 
-def extract_flux(image, output_filename, trace_locs, trace_widths,
-                 img_noise=None, img_hdr=None, fit_background=False, bad_pixel_fraction=0.0, pool=None):
+
+def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=None, img_hdr=None, fit_background=False, bad_pixel_fraction=0.0, pool=None):
     """
     Extracts the flux from the traces to make 1-D spectra. 
 
@@ -194,7 +205,7 @@ def extract_flux(image, output_filename, trace_locs, trace_widths,
         output_filename: path to output directory
         trace_locs: y-location of the fiber traces (N_fibers, N_orders, Nx)
         trace_widths: standard deviation widths of the fiber traces (N_fibers, N_orders, Nx)
-        img_noise: optional frame that describes the noise in each pixel (Ny, Nx). Either 2-D array, or filename of FITS file
+        img_noise: 2-D frame that describes the noise in each pixel (Ny, Nx). if None, will try to compute this emperically
         img_hdr: optional FITS header for the image
         fit_background: if True, fits for a constant background during trace extraction (default: False). 
         bad_pixel_fraction: assume this fraction of all 1-D fluxes are bad and will be masked as nans (default 0.01)
@@ -210,16 +221,15 @@ def extract_flux(image, output_filename, trace_locs, trace_widths,
             image = hdulist[0].data
             img_hdr = hdulist[0].header
 
+    # if no noise map passed in, try to compute it emperically from the data
     if img_noise is None:
-        img_noise = np.ones(image.shape)
-    else:
-        if not isinstance(img_noise, np.ndarray):
-            with fits.open(img_noise) as hdulist:
-                img_noise = hdulist[0].data
+        img_noise = np.zeros(image.shape) * np.nan
 
-    # output
+    # output 
     fluxes = np.zeros(trace_locs.shape)+np.nan
-    errors = np.zeros(trace_locs.shape)+np.nan
+    errors_extraction = np.zeros(trace_locs.shape)+np.nan
+    errors_bkgd_only = np.zeros(trace_locs.shape)+np.nan
+    errors_emperical = np.zeros(trace_locs.shape)+np.nan
     badpixmetric = np.zeros(trace_locs.shape)+np.nan
 
     num_fibers = trace_locs.shape[0]
@@ -248,8 +258,10 @@ def extract_flux(image, output_filename, trace_locs, trace_widths,
                 # extract flux from chunk
                 outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background)
                 fluxes[:, order, c_start:c_end] = outputs[0]
-                errors[:, order, c_start:c_end] = outputs[1]
-                badpixmetric[:, order, c_start:c_end] = outputs[2]
+                errors_extraction[:, order, c_start:c_end] = outputs[1]
+                errors_bkgd_only[:, order, c_start:c_end] = outputs[2]
+                errors_emperical[:, order, c_start:c_end] = outputs[3]
+                badpixmetric[:, order, c_start:c_end] = outputs[-1]
             else:
                 output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background))
                 pool_jobs.append((output, order, c_start, c_end))
@@ -260,8 +272,10 @@ def extract_flux(image, output_filename, trace_locs, trace_widths,
             job_output, order, c_start, c_end = job
             outputs = job_output.get()
             fluxes[:, order, c_start:c_end] = outputs[0]
-            errors[:, order, c_start:c_end] = outputs[1]
-            badpixmetric[:, order, c_start:c_end] = outputs[2]
+            errors_extraction[:, order, c_start:c_end] = outputs[1]
+            errors_bkgd_only[:, order, c_start:c_end] = outputs[2]
+            errors_emperical[:, order, c_start:c_end] = outputs[3]
+            badpixmetric[:, order, c_start:c_end] = outputs[-1]
     
     # use the fit metric to mask out bad fluxes
     for fib in range(num_fibers):
@@ -285,15 +299,19 @@ def extract_flux(image, output_filename, trace_locs, trace_widths,
             where_bad_pixels = np.where((this_metric > upper_bound))
 
             fluxes[fib, order][where_bad_pixels] = np.nan
-            errors[fib, order][where_bad_pixels] = np.nan
+            errors_extraction[fib, order][where_bad_pixels] = np.nan
+            errors_bkgd_only[fib, order][where_bad_pixels] = np.nan
+            errors_emperical[fib, order][where_bad_pixels] = np.nan
 
     # save the data
     prihdu = fits.PrimaryHDU(data=fluxes, header=img_hdr)
-    exthdu = fits.ImageHDU(data=errors)
-    hdulist = fits.HDUList([prihdu, exthdu])
+    exthdu = fits.ImageHDU(data=errors_extraction)
+    exthdu2 = fits.ImageHDU(data=errors_bkgd_only)
+    exthdu3 = fits.ImageHDU(data=errors_emperical)
+    hdulist = fits.HDUList([prihdu, exthdu, exthdu2, exthdu3])
     hdulist.writeto(output_filename, overwrite=True)
 
-    return fluxes, errors
+    return fluxes, errors_extraction
 
 
 
