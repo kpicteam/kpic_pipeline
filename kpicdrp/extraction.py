@@ -72,7 +72,7 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     g = models.Gaussian1D(amplitude=1./np.sqrt(2*np.pi*sigma**2), mean=center, stddev=sigma)
     good = np.where(~np.isnan(dat_slice))
     if np.size(good) < 3:
-        return np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan
     good_slice = dat_slice[good]
     good_coords = dat_coords[good]
     noise = noise[good]
@@ -142,6 +142,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         ymax_long = int(np.round(np.max(order_locs[:, x]))) + 6 + 1
         bkgd_slice = bkgd_column[ymin_long:ymax_long]
         bkgd_noise = np.nanstd(bkgd_slice) # roughly the noise
+        num_bkgd_points = np.size(bkgd_column)
 
         if fit_background:
             # compute background as median of remaining pixels
@@ -174,7 +175,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             # account for the fact we are doing total integrated flux of Gaussian when computing the noise
             # JX: sometimes flux is too negative and makes arg of sqrt negative, throwing Runtime warning
             fluxerr_emperical = np.sqrt(gain*flux + (bkgd_noise * np.sqrt(2*np.pi) * sigma)**2 )
-            fluxerrs_extraction[fiber, x] = flux_err_extraction
+            fluxerrs_extraction[fiber, x] = np.sqrt(flux_err_extraction**2 + bkgd_noise**2/num_bkgd_points) 
             fluxerrs_bkgd_only[fiber, x] = flux_err_bkgd_only
             fluxerrs_emperical[fiber, x] = fluxerr_emperical
         column_maxres = np.array(column_maxres)    
