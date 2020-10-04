@@ -5,12 +5,27 @@ import scipy.optimize
 import astropy.io.fits as fits
 from astropy.modeling import models, fitting
 import astroscrappy
-import  astropy.time as time
+from astropy.time import Time
 import astropy.units as u
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, EarthLocation
+import copy
+
 
 gain = 2.85 # e-/ADU
 
+def add_baryrv(header):
+    """
+    Add barycentric rv to fits headers of extracted frames
+    copied from JB's extraction code
+    """
+    out_header = copy.copy(header)
+    keck = EarthLocation.from_geodetic(lat=19.8283 * u.deg, lon=-155.4783 * u.deg, height=4160 * u.m)
+    sc = SkyCoord(float(header["CRVAL1"]) * u.deg, float(header["CRVAL2"]) * u.deg)
+    barycorr = sc.radial_velocity_correction(obstime=Time(float(header["MJD"]), format="mjd", scale="utc"),
+                                             location=keck)
+    out_header["BARYRV"] = barycorr.to(u.km / u.s).value
+
+    return out_header
 
 def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
     """
@@ -23,18 +38,23 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
         detect_cosmics: boolean, if True, runs a cosmic ray rejection algorithm on each image
 
     Returns:
-        sci_data: 2-D mean image of all the input science files
+        mean_sci_data: 2-D mean image of all the input science files
+        sci_hdrs: headers of input science files
         sci_noise: 2-D stddev map of all the input science files
         sci_frames: array of all the 2-D images. Shape of (N_frames, y, x)
     """
 
     # list containing 1 or more frames
-    sci_data = []
+    sci_frames = []
+    sci_hdrs = []
     # iterate over images from the same fiber
     for filename in filelist:
         with fits.open(filename) as hdulist:
             dat = np.copy(hdulist[0].data)
             dat = np.rot90(dat, -1)
+            # copy hdr of frame, plus new keyword for BARYRV
+            out_hdr = add_baryrv(hdulist[0].header)
+            sci_hdrs.append(out_hdr)
 
             if detect_cosmics:
                 dat_crmap, corr_dat = astroscrappy.detect_cosmics(dat, inmask=badpixmap)
@@ -44,14 +64,14 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
             # subtract background
             dat -= bkgd
 
-            sci_data.append(dat)
+            sci_frames.append(dat)
         hdulist.close()
 
-    # take mean and std across different frames - JX: is the mean used later on?
-    sci_noise = np.nanstd(sci_data, axis=0)
-    mean_sci_data = np.nanmean(sci_data, axis=0)
+    # JX: are either of these 2 used later on?
+    sci_noise = np.nanstd(sci_frames, axis=0)
+    mean_sci_data = np.nanmean(sci_frames, axis=0)
 
-    return mean_sci_data, sci_noise, sci_data
+    return mean_sci_data, sci_hdrs, sci_noise, sci_frames
 
 
 def extract_1d(dat_coords, dat_slice, center, sigma, noise):
