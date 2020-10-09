@@ -12,7 +12,7 @@ from astropy.coordinates import SkyCoord
 gain = 2.85 # e-/ADU
 
 
-def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
+def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True, scale=True):
     """
     Does simple processing to the raw spectroscopic data: bkgd subtraction, bad pixels, cosmic rays
 
@@ -21,6 +21,7 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
         bkgd: 2-D bkgd frame for subtraction
         badpixmap: 2-D bad pixel map
         detect_cosmics: boolean, if True, runs a cosmic ray rejection algorithm on each image
+        scale: if True, scales the background to try to match the science frame. 
 
     Returns:
         sci_data: 2-D mean image of all the input science files
@@ -42,7 +43,12 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True):
             dat[np.where(np.isnan(badpixmap))] = np.nan
 
             # subtract background
-            dat -= bkgd
+            if scale:
+                scale_factor = (np.nanmedian(dat)/np.nanmedian(bkgd))
+            else:
+                scale_factor = 1
+
+            dat -= bkgd * scale_factor
 
             sci_data.append(dat)
         hdulist.close()
@@ -99,7 +105,7 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     return flux, flux_err, flux_err_bkgd_only, max_res
 
 
-def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background):
+def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background, trace_flag):
     """
     Extracts the flux from a chunk of size Nx of an order for some given fibers
 
@@ -109,6 +115,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         order_widths: standard deviation of fiber traces in an order (N_fibers, Nx)
         img_noise; 2-D frame for noise in each pixel (Ny, Nx)
         fit_background: if True, fit the background
+        trace_flag: numberical flags of length N_fibers length 
 
     Returns:
         fluxes: (N_fibers, Nx) extracted 1-D fluxes
@@ -134,21 +141,24 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         img_column = image[:, x]
         centers = order_locs[:, x]
         bkgd_column = np.copy(img_column) # make a copy for masking the fibers
-        # for each fiber, mask 11 pixels around it
-        for center in centers:
+        sci_fibers = np.where(trace_flag == 0)[0] # identify science fibers
+        # for each science fiber, mask 11 pixels around it
+        for center in centers[sci_fibers]:
             center_int = int(np.round(center))
             bkgd_column[center_int-5:center_int+5+1] = np.nan 
-        ymin_long = int(np.round(np.min(order_locs[:, x]))) - 6
-        ymax_long = int(np.round(np.max(order_locs[:, x]))) + 6 + 1
+        ymin_long = int(np.round(np.min(order_locs[sci_fibers, x]))) - 6
+        ymax_long = int(np.round(np.max(order_locs[sci_fibers, x]))) + 6 + 1
         bkgd_slice = bkgd_column[ymin_long:ymax_long]
         bkgd_noise = np.nanstd(bkgd_slice) # roughly the noise
-        num_bkgd_points = np.size(bkgd_column)
+        num_bkgd_points = np.size(bkgd_slice[np.where(~np.isnan(bkgd_slice))])
 
         if fit_background:
             # compute background as median of remaining pixels
             bkgd_level = np.nanmedian(bkgd_slice)
+            err_bkgd = bkgd_noise/np.sqrt(num_bkgd_points) * (np.pi/2) # pi/2 factor is due to using median instead of mean. 
         else:
             bkgd_level = 0
+            err_bkgd = 0
 
         column_maxres = []
         for fiber in range(num_fibers):
@@ -175,9 +185,10 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             # account for the fact we are doing total integrated flux of Gaussian when computing the noise
             # JX: sometimes flux is too negative and makes arg of sqrt negative, throwing Runtime warning
             fluxerr_emperical = np.sqrt(gain*flux + (bkgd_noise * np.sqrt(2*np.pi) * sigma)**2 )
-            fluxerrs_extraction[fiber, x] = np.sqrt(flux_err_extraction**2 + bkgd_noise**2/num_bkgd_points) 
+            fluxerrs_extraction[fiber, x] = np.sqrt(flux_err_extraction**2 + err_bkgd**2) 
             fluxerrs_bkgd_only[fiber, x] = flux_err_bkgd_only
             fluxerrs_emperical[fiber, x] = fluxerr_emperical
+
         column_maxres = np.array(column_maxres)    
         
         ymin_long = int(np.round(np.min(order_locs[:, x]))) - 6
@@ -197,7 +208,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         
 
 
-def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=None, img_hdr=None, fit_background=False, bad_pixel_fraction=0.0, pool=None):
+def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=None, img_hdr=None, fit_background=False, trace_flags=None, bad_pixel_fraction=0.0, pool=None):
     """
     Extracts the flux from the traces to make 1-D spectra. 
 
@@ -209,6 +220,7 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
         img_noise: 2-D frame that describes the noise in each pixel (Ny, Nx). if None, will try to compute this emperically
         img_hdr: optional FITS header for the image
         fit_background: if True, fits for a constant background during trace extraction (default: False). 
+        trace_flags: numberical flags array of length N_fibers. 0 indicates regular fiber. 1 indicates fiber for purely background extraction. 
         bad_pixel_fraction: assume this fraction of all 1-D fluxes are bad and will be masked as nans (default 0.01)
         pool: optional multiprocessing.Pool object to pass in to parallelize the spectral extraction (default: None)
 
@@ -225,6 +237,10 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
     # if no noise map passed in, try to compute it emperically from the data
     if img_noise is None:
         img_noise = np.zeros(image.shape) * np.nan
+
+    # if no flags passed in, assume they are all science fibers
+    if trace_flags is None:
+        trace_flags = np.zeros(trace_locs.shape[0])
 
     # output 
     fluxes = np.zeros(trace_locs.shape)+np.nan
@@ -257,14 +273,14 @@ def extract_flux(image, output_filename, trace_locs, trace_widths, img_noise=Non
 
             if pool is None:
                 # extract flux from chunk
-                outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background)
+                outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, trace_flags)
                 fluxes[:, order, c_start:c_end] = outputs[0]
                 errors_extraction[:, order, c_start:c_end] = outputs[1]
                 errors_bkgd_only[:, order, c_start:c_end] = outputs[2]
                 errors_emperical[:, order, c_start:c_end] = outputs[3]
                 badpixmetric[:, order, c_start:c_end] = outputs[-1]
             else:
-                output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background))
+                output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background. trace_flags))
                 pool_jobs.append((output, order, c_start, c_end))
     
     # for multiprocessing, need to retrieve outputs outputs
@@ -437,11 +453,11 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
     orders_centers = []
     orders_center_fit = []
 
-    frame_rot = np.rot90(frame, -1)
+    frame_rot = frame #np.rot90(frame, -1)
 
     if xs is None:
         xmin = 0
-        xmax = frame.shape[0]
+        xmax = frame_rot.shape[1]
         xs = np.arange(xmin, xmax, 1)
 
     ends = guess_ends
@@ -505,7 +521,7 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
         orders_centers.append(order_centers)
         orders_center_fit.append(center_fitargs)
 
-    spectral_responses = measure_spectral_response(orders_fluxes)
+    #spectral_responses = measure_spectral_response(orders_fluxes)
 
     if plot:
         import matplotlib.pylab as plt
@@ -518,7 +534,7 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
             i += 1
 
         plt.figure(figsize=(16,16))
-        plt.imshow(frame_rot, cmap="viridis", interpolation="nearest", vmin=0, vmax=np.nanpercentile(dat_rot, 90))
+        plt.imshow(frame_rot, cmap="viridis", interpolation="nearest", vmin=0, vmax=np.nanpercentile(frame_rot, 90))
         plt.gca().invert_yaxis()
 
         for order_centers in orders_centers:
@@ -526,7 +542,7 @@ def fit_trace(frame, guess_ends, xs=None, plot=False):
 
         plt.show()
 
-    return orders_centers, orders_sigmas, spectral_responses
+    return orders_centers, orders_sigmas#, spectral_responses
 
 
 def measure_spectral_response(orders_wvs, orders_fluxes, model_wvs, model_fluxes, filter_size=500):
@@ -541,18 +557,22 @@ def measure_spectral_response(orders_wvs, orders_fluxes, model_wvs, model_fluxes
         filter_size: (int) smoothing size in pixels
     """
 
-    spectral_responses = []
+    model_spectra = np.array([np.interp(thiswvs, model_wvs, model_fluxes) for thiswvs in orders_wvs])
 
-    for thiswvs, order in zip(orders_wvs, orders_fluxes):
-        #continuum = ndi.median_filter(order, filter_size)
+    spectral_responses = orders_fluxes / model_spectra
+    spectral_responses /= np.nanpercentile(spectral_responses, 99)
+
+    # for thiswvs, order in zip(orders_wvs, orders_fluxes):
+    #     #continuum = ndi.median_filter(order, filter_size)
         
-        model = np.interp(thiswvs, model_wvs, model_fluxes)
-        #model_continuum = ndi.median_filter(order, filter_size)
+    #     model = np.interp(thiswvs, model_wvs, model_fluxes)
+    #     #model_continuum = ndi.median_filter(order, filter_size)
 
-        this_response = order/model
-        this_response /= np.nanpercentile(this_response, 99)
+    #     this_response = order/model
+    #     order_norm = np.nanpercentile(this_response, 99)
+    #     this_response /= np.nanpercentile(this_response, 99)
 
-        spectral_responses.append(this_response)
+    #     spectral_responses.append(this_response)
 
     return spectral_responses
 
