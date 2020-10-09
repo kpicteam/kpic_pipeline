@@ -37,7 +37,7 @@ filenums =  [2,6,7,11]
 filelist = [os.path.join(raw_data_dir, filestr.format(i)) for i in filenums]
 
 nobadpix = np.zeros(bkgd_1s.shape) # can be used if you want to skip bad pixel map application
-mean_sci_frame, sci_noise, sci_frames = kpicdrp.extraction.process_sci_raw2d(filelist, bkgd_1s,
+mean_sci_data, sci_hdrs, sci_noise, sci_frames = kpicdrp.extraction.process_sci_raw2d(filelist, bkgd_1s,
                                                         badpixmap_1s, detect_cosmics=False)
 
 # extract fluxes frame by frame, and save output from each frame
@@ -46,19 +46,17 @@ all_errors = []
 # option of multiprocessing, arg is num processes - set pool to None if not desired
 pool = mp.Pool(2)
 
-for frame, num in zip(sci_frames, filenums):
+for frame, num, hdr in zip(sci_frames, filenums, sci_hdrs):
     fluxes, error = kpicdrp.extraction.extract_flux(frame,
                                 os.path.join(target_dir + "nspec200702_0{0:03d}_fluxes.fits".format(num)),
-                                trace_centers, trace_sigmas, fit_background=True, pool=pool)
+                                trace_centers, trace_sigmas, img_hdr=hdr, fit_background=True, pool=pool)
 
     all_fluxes.append(fluxes)
     all_errors.append(error)
 
-# average the fluxes in time (across frames), and save
+# average the fluxes in time (as a quick check)
 fluxes = np.nanmedian(all_fluxes, axis=0)
 errors = np.nanmedian(all_errors, axis=0)
-hdulist = fits.HDUList([fits.PrimaryHDU(data=fluxes), fits.ImageHDU(data=errors)])
-hdulist.writeto(os.path.join(target_dir + "nspec200702_stacked_fluxes.fits"), overwrite=True)
 
 # plot fluxes from a specific fiber
 fib_ind = 1  # i.e. fiber 2, where science target is in this case
