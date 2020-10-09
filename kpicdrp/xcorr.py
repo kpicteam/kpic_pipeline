@@ -7,7 +7,7 @@ import scipy.interpolate as interp
 from PyAstronomy import pyasl
 
 
-
+        
 def simple_xcorr(shifts, orders_wvs, orders_fluxes, template_wvs, template_fluxes, telluric_wvs=None, telluric_fluxes=None, orders_responses=None):
     """
     Do a simple CCF 
@@ -103,6 +103,100 @@ def simple_xcorr(shifts, orders_wvs, orders_fluxes, template_wvs, template_fluxe
 
     return ccf, acf
 
+
+def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses=None):
+    """
+    Estimate the flux of the planet using lsqr analysis as a function of shift. 
+
+    Args:
+        shifts: np.array of shifts in km/s
+        orders_wvs: (Norders, Nchannels) array of wavelengths
+        orders_fluxes: (Norders, Nchannels) array of fluxes
+        star_wvs: np.array of wvs for star template
+        star_template_fluxes: np.arraay of fluxes for star template
+        template_wvs: np.array of wvs for the plnaet template
+        template_fluxes: np.array of fluxes for the plnaet template
+        orders_responses (Norders, Nchannels) array of spectral responses
+
+    Returns:
+        ccf: cross correlation with the planet template with the data
+        acf: autocorrelation of the plaent data
+        star_cf: cross correlation of the planet template with the star template
+    """
+
+    fluxes = []
+    star_fluxes = []
+    acf_fluxes = []
+
+
+    for shift in shifts:
+        new_beta = shift/consts.c.to(u.km/u.s).value 
+        new_redshift = np.sqrt((1 + new_beta)/(1 - new_beta)) - 1
+
+
+        all_pl_template = []
+        all_pl_noshift_template = []
+        all_star_template = []
+        all_data = []
+
+        for i in range(orders_wvs.shape[0]):    
+            thiswvs = orders_wvs[i]
+            order = orders_fluxes[i]
+            wvs_starframe = thiswvs/(1+new_redshift)
+            
+            if orders_responses is not None:
+                resp_template = orders_responses[i]
+            else:
+                resp_template = 1
+            
+            order_copy = np.copy(order)
+            order_mask = np.where(np.isnan(order))
+            order_copy[order_mask] = np.nanmedian(order)
+            order_continuum = ndi.median_filter(order_copy, 100)
+            order_copy = order - order_continuum + np.nanmedian(order_continuum)
+            order_copy[order_mask] = np.nan
+
+
+            template = np.interp(wvs_starframe, template_wvs, template_fluxes) * resp_template
+            template_mask = np.where(np.isnan(template))
+            template[template_mask] = np.nanmedian(template)
+            template_continuum = ndi.median_filter(template, 100)
+            template = (template - template_continuum)/np.median(template_continuum) + 1
+            template[template_mask] = np.nan
+
+
+            template_noshift = np.interp(thiswvs, template_wvs, template_fluxes) * resp_template
+            template_noshift_mask = np.where(np.isnan(template_noshift))
+            template_noshift[template_noshift_mask] = np.nanmedian(template_noshift)
+            template_noshift_continuum = ndi.median_filter(template_noshift, 100)
+            template_noshift = (template_noshift - template_noshift_continuum)/np.median(template_noshift_continuum) + 1
+            template_noshift[template_noshift_mask] = np.nan
+
+            star_template = np.interp(thiswvs, star_wvs, star_template_fluxes)
+            star_mask = np.where(np.isnan(star_template))
+            star_template[star_mask] = np.nanmedian(star_template)
+            star_continuum = ndi.median_filter(star_template, 100)
+            star_template = (star_template - star_continuum)/np.median(star_template) + 1
+            star_template[star_mask] = np.nan
+
+            good = np.where((~np.isnan(order_copy)) & (~np.isnan(template)) & (~np.isnan(star_template)) & (~np.isnan(template_noshift)))
+            all_data = np.append(all_data, order_copy[good])
+            all_pl_template = np.append(all_pl_template, template[good])
+            all_star_template = np.append(all_star_template, star_template[good])
+            all_pl_noshift_template = np.append(all_pl_noshift_template, template_noshift[good])
+        
+        A_matrix = np.array([all_pl_template, all_star_template]).T
+        results = optimize.lsq_linear(A_matrix, all_data)
+
+        results_noshift = optimize.lsq_linear(A_matrix, all_pl_noshift_template)
+
+        results_star = optimize.lsq_linear(A_matrix, all_star_template)
+
+        fluxes.append(results.x[0])
+        star_fluxes.append(results_star.x[0])
+        acf_fluxes.append(results_noshift.x[0])
+        
+    return np.array(fluxes), np.array(acf_fluxes), np.array(star_fluxes)
 
 def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses, broadened=False):
     rvshift, vsini, pl_flux, star_flux = fitparams
