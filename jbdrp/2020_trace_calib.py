@@ -9,8 +9,8 @@ from scipy.signal import correlate2d
 from copy import copy
 import multiprocessing as mp
 import itertools
-from utils_2020.badpix import *
-from utils_2020.misc import *
+from jbdrp.utils_2020.badpix import *
+from jbdrp.utils_2020.misc import *
 import pandas as pd
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.optimize import minimize
@@ -150,7 +150,12 @@ if __name__ == "__main__":
     # mydir = os.path.join(mykpicdir,"20200609_zet_Aql")
     # mydir,usershift = os.path.join(mykpicdir,"20200701_ups_Her"),30
     # mydir,usershift = os.path.join(mykpicdir,"20200702_ups_Her"),30
-    mydir,usershift = os.path.join(mykpicdir,"20200703_ups_Her"),30
+    # mydir,usershift = os.path.join(mykpicdir,"20200703_ups_Her"),30
+    # mydir,usershift = os.path.join(mykpicdir,"20200928_HD_154301"),-28
+    # mydir,usershift = os.path.join(mykpicdir,"20200928_HIP_95771"),-28
+    # mydir,usershift = os.path.join(mykpicdir,"20200928_zet_Aql"),-28
+    # mydir,usershift = os.path.join(mykpicdir,"20200929_lam_Cap"),-28
+    mydir,usershift = os.path.join(mykpicdir,"20201001_HR_8799"),-28
 
 
 
@@ -162,7 +167,7 @@ if __name__ == "__main__":
         hdulist = pyfits.open(background_med_filename)
         background = hdulist[0].data
         background_header = hdulist[0].header
-        tint = int(background_header["ITIME"])
+        tint = float(background_header["TRUITIME"])
         coadds = int(background_header["COADDS"])
 
         persisbadpixmap_filename = glob(os.path.join(mydir,"calib","*persistent_badpix*.fits"))[0]
@@ -186,14 +191,14 @@ if __name__ == "__main__":
             im = hdulist[0].data.T[:,::-1]
             header = hdulist[0].header
             header_list.append(header)
-            if tint != int(header["ITIME"]) or coadds != int(header["COADDS"]):
-                raise Exception("bad tint {0} or coadds {1}, should be {2} and {3}: ".format(int(header["ITIME"]),int(header["COADDS"]),tint,coadds) + filename)
+            if tint != float(header["TRUITIME"]) or coadds != int(header["COADDS"]):
+                raise Exception("bad tint {0} or coadds {1}, should be {2} and {3}: ".format(float(header["TRUITIME"]),int(header["COADDS"]),tint,coadds) + filename)
             hdulist.close()
 
             im_skysub = im-background
             badpixmap = persisbadpixmap#*get_badpixmap_from_laplacian(im_skysub,bad_pixel_fraction=1e-2)
 
-            # plt.imshow((im_skysub*badpixmap)[1550:1750,0:100],interpolation="nearest",origin="lower")
+            # plt.imshow((im_skysub*badpixmap),interpolation="nearest",origin="lower")#[1550:1750,0:100]
             # plt.clim([0,50])
             # plt.show()
 
@@ -227,12 +232,12 @@ if __name__ == "__main__":
             numthreads=30
             pool = mp.Pool(processes=numthreads)
 
-            for order_id,(y1,y2) in enumerate(fibers[fiber_num]+usershift):
+            for order_id,(y1,y2) in enumerate(np.clip(fibers[fiber_num]+usershift,0,2047)):
                 print(order_id,(y1,y2))
                 yindices = np.arange(y1,y2)
 
                 if 0:
-                    if order_id != 5 or fiber_num != 0:
+                    if order_id != 0 or fiber_num != 3:
                         continue
                     xindices = np.arange(1500,2000)
                     out,residuals = _fit_trace((xindices,yindices,

@@ -10,11 +10,10 @@ from copy import copy
 import multiprocessing as mp
 from scipy.optimize import minimize
 import itertools
-from utils_2020.extract_flux import extract_flux
+from jbdrp.utils_2020.extract_flux import extract_flux
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation
 from astropy import units as u
-
 from astropy.utils import iers
 from astropy.utils.iers import conf as iers_conf
 print(iers_conf.iers_auto_url)
@@ -81,7 +80,34 @@ if __name__ == "__main__":
     # mydir = os.path.join(mykpicdir,"20200703_HR_8799")
     # mydir = os.path.join(mykpicdir,"20200703_HR_8799_e")
     # mydir = os.path.join(mykpicdir,"20200703_kap_And")
-    mydir = os.path.join(mykpicdir,"20200703_kap_And_B")
+    # mydir = os.path.join(mykpicdir,"20200703_kap_And_B")
+    # mydir = os.path.join(mykpicdir,"20200928_HIP_95771")
+    # mydir = os.path.join(mykpicdir,"20200928_zet_Aql")
+    # mydir = os.path.join(mykpicdir,"20200928_HR_7672_B")
+    # mydir = os.path.join(mykpicdir,"20200928_HR_8799")
+    # mydir = os.path.join(mykpicdir,"20200928_HR_8799_test")
+    # mydir = os.path.join(mykpicdir,"20200928_HR_4747")
+    # mydir = os.path.join(mykpicdir,"20200928_HR_4747_B")
+    # mydir = os.path.join(mykpicdir,"20200928_HIP_6960")
+    # mydir = os.path.join(mykpicdir,"20200928_HD_1160")
+    # mydir = os.path.join(mykpicdir,"20200928_HD_1160_B")
+    # mydir = os.path.join(mykpicdir,"20200928_HIP_16322")
+    # mydir = os.path.join(mykpicdir,"20200928_RX_J0342.5_1216")
+    # mydir = os.path.join(mykpicdir,"20200928_RX_J0342.5_1216_B")
+    # mydir = os.path.join(mykpicdir,"20200928_HIP_18717")
+    # mydir = os.path.join(mykpicdir,"20200928_DH_Tau")
+    # mydir = os.path.join(mykpicdir,"20200928_DH_Tau_B")
+    # mydir = os.path.join(mykpicdir,"20200929_HIP_95771")
+    # mydir = os.path.join(mykpicdir,"20200929_lam_Cap")
+    # mydir = os.path.join(mykpicdir,"20200929_HD_206893")
+    # mydir = os.path.join(mykpicdir,"20200929_HD_206893_B")
+    # mydir = os.path.join(mykpicdir,"20200929_HR_8799")
+    # mydir = os.path.join(mykpicdir,"20200929_HR_8799_b")
+    # mydir = os.path.join(mykpicdir,"20200929_51_Eri")
+    # mydir = os.path.join(mykpicdir,"20200929_51_Eri_b")
+    # mydir = os.path.join(mykpicdir,"20201001_HIP_95771")
+    # mydir = os.path.join(mykpicdir,"20201001_HR_8799")
+    mydir = os.path.join(mykpicdir,"20201001_HR_8799_b")
     # mydir,no_background,fitbackground = os.path.join(mykpicdir,"20200703_ROXs_12B_chopping"),True,True
 
     # filelist = glob(os.path.join(mydir, "raw", "*0041*.fits"))

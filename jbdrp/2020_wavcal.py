@@ -252,8 +252,13 @@ if __name__ == "__main__":
     # mydir = os.path.join(mykpicdir,"20200609_HIP_81497")
     # mydir = os.path.join(mykpicdir, "20200701_HIP_81497")
     # mydir = os.path.join(mykpicdir, "20200702_HIP_81497")
-    mydir = os.path.join(mykpicdir, "20200703_HIP_81497")
-    target_rv = -55.567  # bet Peg
+    # mydir = os.path.join(mykpicdir, "20200703_HIP_81497")
+    # target_rv = -55.567  # bet Peg
+    # phoenix_model_host_filename = glob(os.path.join(phoenix_folder, "HIP_81497_lte03600-1.00-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits"))[0]
+    # mydir = os.path.join(mykpicdir,"20200928_HIP_95771")
+    # mydir = os.path.join(mykpicdir,"20200929_HIP_95771")
+    mydir = os.path.join(mykpicdir,"20201001_HIP_95771")
+    target_rv = -85.391  # bet Peg
     phoenix_model_host_filename = glob(os.path.join(phoenix_folder, "HIP_81497_lte03600-1.00-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits"))[0]
     # mydir = os.path.join(mykpicdir, "20191012_HD_1160_A")
     # target_rv = 12.60
@@ -526,7 +531,7 @@ if __name__ == "__main__":
         if debug: # jump
             #l=2 end of the band is probably off
             #l=3, not sure
-            l = 2
+            l = 6
 
             x = np.arange(0,2048)
             spectrum = combined_spec[fib,l,:]

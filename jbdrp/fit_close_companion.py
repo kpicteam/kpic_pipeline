@@ -11,16 +11,17 @@ import multiprocessing as mp
 from scipy.optimize import minimize
 import itertools
 import pandas as pd
-from wavcal import convolve_spectrum_line_width,convolve_spectrum_pixel_width
+# from jbdrp.wavcal import convolve_spectrum_line_width,convolve_spectrum_pixel_width
 from scipy.interpolate import interp1d
-from utils_2020.badpix import *
-from utils_2020.misc import *
-from utils_2020.spectra import *
+from jbdrp.utils_2020.badpix import *
+from jbdrp.utils_2020.misc import *
+from jbdrp.utils_2020.spectra import *
 from scipy import interpolate
 from PyAstronomy import pyasl
 from scipy.optimize import nnls
 from scipy.optimize import lsq_linear
 import csv
+from jbdrp.RVstability import get_err_from_posterior
 
 def LPFvsHPF(myvec,cutoff):
     myvec_cp = copy(myvec)
@@ -57,28 +58,33 @@ def _fitRV(paras):
     A0_rv,A0_baryrv,host_rv,science_baryrv,c_kms,cutoff,rv_list = paras
     print("working on ",vsini)
 
+
     # cp_science_err = copy(science_err)
     whichorder = np.tile(np.arange(science_err.shape[0])[:,None],(1,science_err.shape[1]))
 
+    planet_broadspec_func0 = interp1d(wvs4broadening, planet_convspec_broadsampling, bounds_error=False,
+                                     fill_value=np.nan)
     if vsini != 0:
         planet_broadspec = pyasl.rotBroad(wvs4broadening, planet_convspec_broadsampling, 0.5, vsini)
         planet_broadspec_func = interp1d(wvs4broadening, planet_broadspec, bounds_error=False,
                                          fill_value=np.nan)
     else:
-        planet_broadspec_func = interp1d(wvs4broadening, planet_convspec_broadsampling, bounds_error=False,
-                                         fill_value=np.nan)
+        planet_broadspec_func = planet_broadspec_func0
 
 
     where_data_nans = np.where(np.isnan(science_spec_hpf))
     transmission = A0_spec / phoenix_A0_func(wvs * (1 - (A0_rv - A0_baryrv) / c_kms))
     transmission[where_data_nans] = np.nan
-    m1_norv = planet_broadspec_func(wvs* (1 - (-15 - science_baryrv) / c_kms)) * transmission
+    # m1_norv = planet_broadspec_func(wvs* (1 - (-15 - science_baryrv) / c_kms)) * transmission
+    m1_norv = planet_broadspec_func0(wvs* (1 - (-0.2-science_baryrv) / c_kms)) * transmission
     # print(np.nanmean(m1_norv), np.nanmean(science_spec_lpf))
     # exit()
-    m1_norv = m1_norv *6.29099057e-04 #/ np.nanmean(m1_norv) * np.nanmean(science_spec_lpf)
+    m1_norv = m1_norv *0.0111351#6.29099057e-04 #/ np.nanmean(m1_norv) * np.nanmean(science_spec_lpf)
     m1_norv_spec_hpf = np.zeros(science_spec_lpf.shape)
     for order_id in range(Norders):
         _, m1_norv_spec_hpf[order_id, :] = LPFvsHPF(m1_norv[order_id, :], cutoff=cutoff)
+
+
 
     fluxout = np.zeros((3,6,np.size(rv_list)))
     dAICout = np.zeros((6,np.size(rv_list)))
@@ -130,12 +136,13 @@ def _fitRV(paras):
                 m1[order_id, :] = LPFvsHPF(m1[order_id, :], cutoff=cutoff)[1]
             # science_spec_hpf[np.where(np.isnan(m1)*np.isnan(m2))] = np.nan
 
-            m1_arr = np.zeros((m1.shape[0], m1.shape[0], m1.shape[1]))
-            for order_id in range(m2.shape[0]):
-                m1_arr[order_id, order_id, :] = m1[order_id, :]
+            # m1_arr = np.zeros((m1.shape[0], m1.shape[0], m1.shape[1]))
+            # for order_id in range(m2.shape[0]):
+            #     m1_arr[order_id, order_id, :] = m1[order_id, :]
 
             ravelHPFdata = np.ravel(data_hpf)
             ravelwvs = np.ravel(wvs)
+
             # plt.figure(1)
             # plt.plot(np.ravel(wvs), np.ravel(transmission))
             # plt.figure(2)
@@ -183,8 +190,10 @@ def _fitRV(paras):
                 for order_id in range(Norders):
                     m3_ravel[order_id, :] = m3_ravel[order_id, :] - m2_ravel[order_id, :]*np.sum(m2_ravel[order_id, :]*m3_ravel[order_id, :])/np.sum(m2_ravel[order_id, :]**2)
                 HPFmodel = np.concatenate([m1_ravel[:, None], m2_ravel,m3_ravel, b1_ravel], axis=1)
-                # HPFmodel = np.concatenate([m1_ravel, m2_ravel,m3_ravel, b1_ravel], axis=1)
                 HPFmodel_H0 = np.concatenate([m2_ravel,m3_ravel, b1_ravel], axis=1)
+                # HPFmodel = np.concatenate([m1_ravel[:, None], m3_ravel, b1_ravel], axis=1)
+                # HPFmodel_H0 = np.concatenate([m3_ravel, b1_ravel], axis=1)
+                # HPFmodel = np.concatenate([m1_ravel, m2_ravel,m3_ravel, b1_ravel], axis=1)
                 # HPFmodel = np.concatenate([m1_ravel[:, None]], axis=1)
                 # HPFmodel_H0 = np.concatenate([m2_ravel], axis=1)
 
@@ -248,6 +257,8 @@ def _fitRV(paras):
                 HPFparas_H0 = lsq_linear(norm_HPFmodel_H0,ravelHPFdata / sigmas_vec).x
 
                 data_model = np.dot(HPFmodel, HPFparas)
+                data_model_pl = HPFmodel[:,0]*HPFparas[0]
+                data_model_st = np.dot(HPFmodel[:,1::],HPFparas[1::])
                 data_model_H0 = np.dot(HPFmodel_H0, HPFparas_H0)
                 deltachi2 = 0  # chi2ref-np.sum(ravelHPFdata**2)
                 ravelresiduals = ravelHPFdata - data_model
@@ -284,6 +295,150 @@ def _fitRV(paras):
                 # plt.plot(res_ccf[(res_ccf_argmax-500):(res_ccf_argmax+500)]/np.max(res_ccf))
                 # plt.show()
 
+                if 0:
+                    # travis_mol_filename=os.path.join(molecular_template_folder,"lte11-4.0_hr8799c_pgs=4d6_Kzz=1d8_gs=5um."+molecule+"only.7")
+                    molecular_template_folder = "/scr3/jruffio/data/kpic/models/molecular_templates/"
+                    molecule = "CO"
+                    travis_mol_filename_D2E=os.path.join(molecular_template_folder,"lte11-4.0_hr8799c_pgs=4d6_Kzz=1d8_gs=5um."+molecule+"only.7_D2E")
+                    mol_template_filename=os.path.join("/scr3/jruffio/data/kpic/20200703_HR_8799_e/","calib",os.path.basename(travis_mol_filename_D2E)+"_conv.csv")
+                    with open(mol_template_filename, 'r') as csvfile:
+                        csv_reader = csv.reader(csvfile, delimiter=' ')
+                        list_starspec = list(csv_reader)
+                        oriplanet_spec_str_arr = np.array(list_starspec, dtype=np.str)
+                        col_names = oriplanet_spec_str_arr[0]
+                        oriplanet_spec = oriplanet_spec_str_arr[1::3,1].astype(np.float)
+                        oriplanet_spec_wvs = oriplanet_spec_str_arr[1::3,0].astype(np.float)
+                        oriplanet_spec = oriplanet_spec/np.mean(oriplanet_spec)
+                        CO_model_spline = interpolate.splrep(oriplanet_spec_wvs,oriplanet_spec)
+                    molecule = "H2O"
+                    travis_mol_filename_D2E=os.path.join(molecular_template_folder,"lte11-4.0_hr8799c_pgs=4d6_Kzz=1d8_gs=5um."+molecule+"only.7_D2E")
+                    mol_template_filename=os.path.join("/scr3/jruffio/data/kpic/20200703_HR_8799_e/","calib",os.path.basename(travis_mol_filename_D2E)+"_conv.csv")
+                    with open(mol_template_filename, 'r') as csvfile:
+                        csv_reader = csv.reader(csvfile, delimiter=' ')
+                        list_starspec = list(csv_reader)
+                        oriplanet_spec_str_arr = np.array(list_starspec, dtype=np.str)
+                        col_names = oriplanet_spec_str_arr[0]
+                        oriplanet_spec = oriplanet_spec_str_arr[1::3,1].astype(np.float)
+                        oriplanet_spec_wvs = oriplanet_spec_str_arr[1::3,0].astype(np.float)
+                        oriplanet_spec = oriplanet_spec/np.mean(oriplanet_spec)
+                        H2O_model_spline = interpolate.splrep(oriplanet_spec_wvs,oriplanet_spec)
+                    molecule = "CH4"
+                    travis_mol_filename_D2E=os.path.join(molecular_template_folder,"lte11-4.0_hr8799c_pgs=4d6_Kzz=1d8_gs=5um."+molecule+"only.7_D2E")
+                    mol_template_filename=os.path.join("/scr3/jruffio/data/kpic/20200928_HD_4747_B/","calib",os.path.basename(travis_mol_filename_D2E)+"_conv.csv")
+                    with open(mol_template_filename, 'r') as csvfile:
+                        csv_reader = csv.reader(csvfile, delimiter=' ')
+                        list_starspec = list(csv_reader)
+                        oriplanet_spec_str_arr = np.array(list_starspec, dtype=np.str)
+                        col_names = oriplanet_spec_str_arr[0]
+                        oriplanet_spec = oriplanet_spec_str_arr[1::3,1].astype(np.float)
+                        oriplanet_spec_wvs = oriplanet_spec_str_arr[1::3,0].astype(np.float)
+                        oriplanet_spec = oriplanet_spec/np.mean(oriplanet_spec)
+                        CH4_model_spline = interpolate.splrep(oriplanet_spec_wvs,oriplanet_spec)
+
+                    model_canvas  = np.zeros(science_spec_hpf.shape) + np.nan
+                    model_canvas.shape = (np.size(model_canvas),)
+                    model_canvas[where_data_finite] = data_model_pl#data_model-data_model_H0
+                    model_canvas.shape = science_spec_hpf.shape
+                    model1_canvas  = np.zeros(science_spec_hpf.shape) + np.nan
+                    model1_canvas.shape = (np.size(model_canvas),)
+                    model1_canvas[where_data_finite] = data_model_st
+                    model1_canvas.shape = science_spec_hpf.shape
+                    model2_canvas  = np.zeros(science_spec_hpf.shape) + np.nan
+                    model2_canvas.shape = (np.size(model_canvas),)
+                    model2_canvas[where_data_finite] = data_model
+                    model2_canvas.shape = science_spec_hpf.shape
+                    # colors=["#0099cc","#ff9900", "#6600ff","#ff99cc"] # b:
+                    from examples.wavcal_demo import plot_kpic_spectrum
+                    f1 = plt.figure(1, figsize=(12, 16))
+                    fontsize = 12
+                    print(np.nanmedian(science_err, axis=1) + 1 * np.nanstd(science_err, axis=1))
+                    # exit()
+                    science_err = np.clip(science_err, None,
+                                          (np.nanmedian(science_err, axis=1) + 1 * np.nanstd(science_err, axis=1))[:,
+                                          None])
+
+                    ax_list = []
+                    N_order = science_err.shape[0]
+                    for order_id in range(science_spec_hpf.shape[0]):
+                        print(order_id)
+                        xmin,xmax = np.nanmedian(wvs[order_id, :])-0.05/2.,np.nanmedian(wvs[order_id, :])+0.05/2.
+                        # plt.subplot(science_spec_hpf.shape[0], 1, science_spec_hpf.shape[0] - order_id)
+
+                        plt.subplot2grid((N_order*8, 1), ((N_order-1-order_id)*8, 0), rowspan=3)
+                        plt.plot(wvs[order_id, :], transmission[order_id, :]/np.nanmax(transmission), linestyle="-", linewidth=0.5,
+                                 label="System transmission", color="black")
+                        tmp = interpolate.splev(wvs[order_id, :], H2O_model_spline, der=0)
+                        tmp0 = interpolate.splev(np.ravel(wvs),H2O_model_spline, der=0)
+                        tmp_vec_hpf = LPFvsHPF(tmp, cutoff=cutoff)[1]
+                        plt.plot(wvs[order_id, :], 0.25*tmp_vec_hpf/np.nanmax(tmp0)+0.6, linestyle="--", linewidth=1,
+                                 label="H$_2$O", color="blue")#lte018-5.0-0.0a+0.0.BT-Settl.spec.7
+                        tmp = interpolate.splev(wvs[order_id, :], CO_model_spline, der=0)
+                        tmp0 = interpolate.splev(np.ravel(wvs),CO_model_spline, der=0)
+                        tmp_vec_hpf = LPFvsHPF(tmp, cutoff=cutoff)[1]
+                        plt.plot(wvs[order_id, :], 0.25*tmp_vec_hpf/np.nanmax(tmp0)+0.4, linestyle="--", linewidth=1,
+                                 label="CO", color="red")#lte018-5.0-0.0a+0.0.BT-Settl.spec.7
+                        tmp = interpolate.splev(wvs[order_id, :], CH4_model_spline, der=0)
+                        tmp0 = interpolate.splev(np.ravel(wvs),CH4_model_spline, der=0)
+                        tmp_vec_hpf = LPFvsHPF(tmp, cutoff=cutoff)[1]
+                        plt.plot(wvs[order_id, :], 0.25*tmp_vec_hpf/np.nanmax(tmp0)+0.2, linestyle="--", linewidth=1,
+                                 label="CH4", color="red")#lte018-5.0-0.0a+0.0.BT-Settl.spec.7
+                        tmp = planet_broadspec_func(wvs * (1 - (-0.2 - science_baryrv) / c_kms))
+                        tmp_vec_hpf = LPFvsHPF(tmp[order_id, :], cutoff=cutoff)[1]
+                        plt.plot(wvs[order_id, :], tmp_vec_hpf/np.nanmax(tmp)+0.2, linestyle="-", linewidth=1,
+                                 label="BT-Settl companion model", color="#0099cc")#lte018-5.0-0.0a+0.0.BT-Settl.spec.7
+                        plt.ylim([0,1])
+                        if order_id == 0:
+                            plt.legend(loc="upper left",frameon=True,fontsize=fontsize,ncol = 2)
+                            # lgd = plt.legend(loc="upper left", bbox_to_anchor=(1, 1), frameon=False,
+                            #                  fontsize=fontsize * 0.9, ncol=1)  # loc="lower right"
+                        plt.tick_params(axis="x", which="both", labelleft=False, right=False, left=False)
+                        # plt.tick_params(axis="y", which="both", labelleft=False, right=False, left=False)
+                        plt.tick_params(axis="y",labelsize=fontsize)
+                        plt.xlim([xmin,xmax ])
+                        plt.xticks([])
+                        plt.yticks([0.5,1])
+
+                        plt.subplot2grid((N_order*8, 1), ((N_order-1-order_id)*8+3, 0), rowspan=3)
+                        ax_list.append(plt.gca())
+                        # plt.plot(wvs[order_id, :], science_spec_hpf[order_id, :], linestyle="-", linewidth=0.5, label="Data (HR 7672 B)",color="#ff9900")
+                        plt.fill_between(wvs[order_id, :],
+                                         science_spec_hpf[order_id, :] - science_err[order_id, :],
+                                         science_spec_hpf[order_id, :] + science_err[order_id, :],
+                                         label="Data 1-$\sigma$ error", alpha=0.5, color="#ff9900")#"Data 1-$\sigma$ error (HR 7672 B)"
+                        plt.plot(wvs[order_id, :], model_canvas[order_id, :], linestyle="-", linewidth=2,label="Companion model", color="#0099cc")
+                        plt.plot(wvs[order_id, :], model1_canvas[order_id, :], linestyle="-", linewidth=2,label="Star model", color="#ff99cc")
+                        plt.plot(wvs[order_id, :], model2_canvas[order_id, :], linestyle="--", linewidth=1,label="Companion + star model", color="black")
+                        # plt.ylim([np.nanmin(science_spec_hpf[order_id, :])-np.nanmedian(science_err[order_id, :]),np.nanmax(science_spec_hpf[order_id, :])+np.nanmedian(science_err[order_id, :])])
+                        # plt.xticks(np.arange((xmin -(xmin%0.005)+0.005),xmax,0.005))
+                        plt.xticks([])
+                        plt.yticks([-200,-100,0,100,200])
+                        plt.ylim([np.nanmin(science_spec_hpf[order_id, :])-np.nanmedian(science_err[order_id, :]),100])
+                        plt.xlim([xmin,xmax ])
+                        plt.tick_params(axis="x", which="both", labelleft=False, right=False, left=False)
+                        plt.tick_params(axis="y",labelsize=fontsize)
+                        if order_id == 0:
+                            plt.legend(loc="upper left",frameon=True,fontsize=fontsize,ncol = 2)
+
+                        plt.subplot2grid((N_order*8, 1), ((N_order-1-order_id)*8+6, 0), rowspan=1)
+                        plt.plot(wvs[order_id, :], science_spec_hpf[order_id, :]-model2_canvas[order_id, :], linestyle="-", linewidth=0.3,label="Residuals", color="black")
+                        plt.xticks(np.arange((xmin -(xmin%0.005)+0.005),xmax,0.005))
+                        plt.yticks([-30,0])
+                        plt.ylim([-30,30])
+                        plt.xlim([xmin,xmax ])
+                        plt.tick_params(axis="x",labelsize=fontsize)
+                        plt.tick_params(axis="y",labelsize=fontsize)
+                        if order_id == 0:
+                            plt.legend(loc="upper left",frameon=True,fontsize=fontsize*0.5)
+                            plt.xlabel("$\lambda$ ($\mu$m)",fontsize=fontsize)
+
+                    # for ax in ax_list:
+                    #     plt.sca(ax)
+                    f1.subplots_adjust(wspace=0,hspace=0)#
+                    # plt.sca(ax_list[0])
+                    plt.tight_layout()
+                    plt.savefig("/scr3/jruffio/data/kpic/figures/HR_7672_B_spectrum.png",bbox_inches='tight')
+                    plt.savefig("/scr3/jruffio/data/kpic/figures/HR_7672_B_spectrum.pdf",bbox_inches='tight')
+                    plt.show()
 
                 # # exit()
                 # # print("H1",HPFparas)
@@ -312,12 +467,18 @@ def _fitRV(paras):
                 # ravelwvs = np.arange(np.size(ravelwvs))
                 # s2 = np.sqrt((HPFchi2 / Npixs_HPFdata))
                 # print(s2)
-                # plt.fill_between(ravelwvs,-sigmas_vec,sigmas_vec,alpha=0.5,color="gray")
-                # plt.fill_between(ravelwvs,-s2*sigmas_vec,s2*sigmas_vec,alpha=0.5,color="cyan")
+                # print("res",np.nanstd(ravelresiduals))
+                # print("slit1_spec_hpf",np.nanstd(np.ravel(slit1_spec_hpf)[where_data_finite]))
+                # print("dark1_spec_hpf",np.nanstd(np.ravel(dark1_spec_hpf)[where_data_finite]))
+                # # plt.fill_between(ravelwvs,-sigmas_vec,sigmas_vec,alpha=0.5,color="gray")
+                # # plt.fill_between(ravelwvs,-s2*sigmas_vec,s2*sigmas_vec,alpha=0.5,color="cyan")
                 # # plt.plot(ravelwvs,ravelHPFdata,label = "data",alpha= 0.5,color="red")
+                # plt.plot(ravelwvs,np.ravel(slit1_spec_hpf)[where_data_finite],label = "slit",alpha= 0.5,color="black")
+                # plt.plot(ravelwvs,np.ravel(dark1_spec_hpf)[where_data_finite],label = "dark",alpha= 0.5,color="grey")
                 # plt.plot(ravelwvs,ravelresiduals,label = "res",alpha= 0.5,color="black")
                 # plt.plot(ravelwvs,HPFparas[0]*m1_ravel, label = "planet hpf",alpha= 0.5,color="blue")
-                # plt.plot(ravelwvs,np.ravel(m1_norv)[where_data_finite], label = "planet",alpha= 0.5,color="red")
+                # # plt.plot(ravelwvs,np.ravel(m1_norv)[where_data_finite], label = "planet",alpha= 0.5,color="red")
+                # plt.ylim([-5*np.nanstd(ravelresiduals),np.nanmedian(HPFparas[0]*m1_ravel)+5*np.nanstd(ravelresiduals)])
                 # # print(np.nanstd(ravelresiduals))
                 # for myorderid in range(whichorder.shape[0]):
                 #     wheremyorder = np.where(whichorder_vec==myorderid)
@@ -354,32 +515,41 @@ if __name__ == "__main__":
     molecule = None#"H2O" #None "CO" "H2O" "CH4"
     # Combining oders 2M0746A 9 / np.sqrt(np.sum(1 / np.array([7, 8, 6, 7, 4, 4, 13.5, 7, 6]) ** 2))
     # selec_orders = [0,1,2,5,6,7,8] # HERE!!!!
-    selec_orders = [6]
-    # selec_orders = [5,6,7,8]
+    selec_orders = [5,6,7,8]
+    # selec_orders = [6]
+    # selec_orders = [0,1,2,6,7,8]
     # selec_orders = [0,1,2,3,4,5,6,7,8]
     # selec_orders = [1,2,6,7,8]
-    # selec_orders_list = [[0],[1],[2],[5],[6],[7],[8]]
-    # selec_orders_list = [[0,1,2,5,6,7,8]]
-    selec_orders_list = [[6]]
+    # selec_orders_list = [[1],[2],[5],[6],[7],[8]]
+    # selec_orders_list = [[6],[7]]
+    selec_orders_list = [[5,6,7,8]]
+    # selec_orders_list = [[1,2]]
+    # selec_orders_list = [[6]]
     # selec_orders_list = [[6],[5,6,7,8]]
     # selec_orders_list = [[0,1,2,5,6,7,8]]
     cutoff = 5 #40
     c_kms = 299792.458
-    vsini_list = np.linspace(0,100,32,endpoint=True) # HERE!!!!
-    # vsini_list = np.array([10,11]) # HERE!!!!
-    # rv_list = np.concatenate([np.arange(-400, -10, 5), np.arange(-10, 10, 0.1), np.arange(10, 400, 5)], axis=0)
+    vsini_list = np.linspace(0,50,32,endpoint=True) # HERE!!!!
+    # vsini_list = np.array([42,]) # HERE!!!!
+    # vsini_list = np.array([22,]) # HERE!!!!
+    # vsini_list = np.array([0,]) # HERE!!!!
+    rv_list = np.concatenate([np.arange(-400, -20, 5), np.arange(-20, 0, 0.1), np.arange(0, 400, 5)], axis=0)
     # rv_list = np.concatenate([np.arange(-400, -5, 5), np.arange(-5, 5, 0.1), np.arange(5, 400, 5)], axis=0)
-    rv_list = np.concatenate([np.arange(-400, -30, 5), np.arange(-30, 0, 0.1), np.arange(0, 400, 5)], axis=0)
-    # rv_list = np.linspace(-12,300,1)
+    # rv_list = np.concatenate([np.arange(-400, -0, 5), np.arange(-0, 50, 1), np.arange(50, 400, 5)], axis=0)
+    # rv_list = np.linspace(-100,100,10)
     # print(np.size(rv_list))
     # exit()
-    # rv_list = np.array([np.linspace(-300,300,101)[58]])
+    # rv_list = np.array([-0.2,])
+    # rv_list = np.array([13,])
     save = True
-    plotonly = False
+    plotonly = True
+    # plotonly = False
+    combined = True
+    # combined = False
     # [[-1.80972972e+01 - 1.49143101e+01 - 2.17664527e+01 - 3.42045802e+01
     #   - 3.70393796e+01 - 4.14921048e+01 - 4.15031564e+01 - 4.89345879e+01
     #   - 5.79634955e+01]
-    #  [-9.35020989e+00 - 2.48176362e+00 - 4.22284978e+00 - 8.28578552e+00
+    #  [-9.35020989e+00 - 2.48176362Se+00 - 4.22284978e+00 - 8.28578552e+00
     #   - 1.11541973e+01 - 1.42992317e+01 - 2.05399413e+01 - 2.72518274e+01
     #   - 3.57545284e+01]
     #  [1.54382410e+03  2.01119527e+03  3.00495446e+03  3.84622960e+03
@@ -396,41 +566,65 @@ if __name__ == "__main__":
         # host_rv = -12.7 # HERE!!!!
         # sciencedir = os.path.join(mykpicdir, "20200608_HR_7672_B") # Teff = 6000 logg 4.5
         # sciencedir = os.path.join(mykpicdir, "20200609_HR_7672_B") # Teff = 6000 logg 4.5
+        # sciencedir = os.path.join(mykpicdir,"20200928_HR_7672_B")
         # phoenix_host_filename = glob(os.path.join(phoenix_folder, "HR_7672_lte06000-4.50-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits"))[0]
         # host_rv = 5 # HERE!!!!
         # sciencedir = os.path.join(mykpicdir, "20200701_HR_8799_c")
         # sciencedir = os.path.join(mykpicdir, "20200702_HR_8799_d")
-        sciencedir = os.path.join(mykpicdir, "20200703_HR_8799_e")
+        # sciencedir = os.path.join(mykpicdir, "20200703_HR_8799_e")
+        # sciencedir = os.path.join(mykpicdir, "20200928_HR_8799_test")
+        # sciencedir = os.path.join(mykpicdir, "20200929_HR_8799_b_nobkgd")
+        # sciencedir = os.path.join(mykpicdir, "20200929_HR_8799_b")
+        sciencedir = os.path.join(mykpicdir, "20201001_HR_8799_b")
         host_rv = -12.6 # HERE!!!!
         phoenix_host_filename = glob(os.path.join(phoenix_folder, "HR_8799" + "*.fits"))[0] # HERE!!!!
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42Bb")
         # host_rv = -2 # HERE!!!!
         # phoenix_host_filename = glob(os.path.join(phoenix_folder, "DH_Tau" + "*.fits"))[0] # HERE!!!!
+        # sciencedir = os.path.join(mykpicdir, "20200928_HD_4747_B")
+        # host_rv = 9.63 # HERE!!!!
+        # phoenix_host_filename = glob(os.path.join(phoenix_folder, "HD_4747" + "*.fits"))[0] # HERE!!!!
+        # sciencedir = os.path.join(mykpicdir, "20200928_HD_1160_B")
+        # host_rv = 12.6 # HERE!!!!
+        # phoenix_host_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0] # HERE!!!!
+        # sciencedir = os.path.join(mykpicdir,"20200928_RX_J0342.5_1216_B")
+        # phoenix_host_filename = glob(os.path.join(phoenix_folder, "RX_J0342_" + "*.fits"))[0] # HERE!!!!
+        # host_rv = 35.4 # HERE!!!!
+        # sciencedir = os.path.join(mykpicdir,"20200929_HD_206893_B")
+        # phoenix_host_filename = glob(os.path.join(phoenix_folder, "HR_8799" + "*.fits"))[0] # HERE!!!!
+        # host_rv = -12.45 # HERE!!!!
+        # sciencedir = os.path.join(mykpicdir, "20200929_51_Eri_b")
+        # host_rv = 12.6 # HERE!!!!
+        # phoenix_host_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0] # HERE!!!!
 
-    combined = True
-    # combined = False
+    if 1:
+        filelist = glob(os.path.join(sciencedir, "*fluxes.fits"))  # [0:1]
+        filelist.sort()
+        # filelist = filelist[2::]
+        print(len(filelist))
+    # exit()
     if not plotonly:
         for selec_orders in selec_orders_list:
         # for sciencefilename in filelist:
+        #     selec_orders = selec_orders_list[0]
         #     print(sciencefilename)
         #     combined = False
         #     science_spec,science_err,slit_spec,dark_spec,science_baryrv = combine_spectra_from_folder([sciencefilename],"science")
         #     hdulist = pyfits.open(sciencefilename)
         #     science_mjd = hdulist[0].header["MJD"]
-            Norders=len(selec_orders)
-            if 1:
-                filelist = glob(os.path.join(sciencedir, "*fluxes.fits"))#[0:1]
-                filelist.sort()
-                print(len(filelist))
-            # exit()
-            science_spec,science_err,slit_spec,dark_spec,science_baryrv = combine_spectra_from_folder(filelist,"science")
-            # print(np.nanmean(science_err[:,5,:]))
-            # science_err[:,6,:] *= 1#1.17
-            # science_err[:,7,:] *= 10#2.24
-            # print(np.nanmean(science_err[:,5,:]))
-            hdulist = pyfits.open(filelist[0])
-            science_mjd = None #hdulist[0].header["MJD"]
+            # # exit()
+            science_spec,science_err,slit_spec,dark_spec,science_baryrv = combine_spectra_from_folder(filelist[10::],"science")
+            # # print(np.nanmean(science_err[:,5,:]))
+            # # science_err[:,6,:] *= 1#1.17
+            # # science_err[:,7,:] *= 10#2.24
+            # # print(np.nanmean(science_err[:,5,:]))
+            # hdulist = pyfits.open(filelist[0])
 
+
+
+
+            science_mjd = None #hdulist[0].header["MJD"]
+            Norders=len(selec_orders)
             print(science_spec.shape)
             print(np.nanmean(science_spec,axis=2))
             # exit()
@@ -459,15 +653,34 @@ if __name__ == "__main__":
             # A0_rv = -12.7 #km/s
             # A0dir = os.path.join(mykpicdir,"20200608_zet_Aql")
             # A0dir = os.path.join(mykpicdir,"20200609_zet_Aql")
+            # A0dir = os.path.join(mykpicdir,"20200928_zet_Aql")
             # A0_rv = -25 #km/s
             # phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
             # A0dir = os.path.join(mykpicdir, "20200701_HR_8799")
             # A0dir = os.path.join(mykpicdir, "20200702_HR_8799")
-            A0dir = os.path.join(mykpicdir, "20200703_HR_8799")
+            # A0dir = os.path.join(mykpicdir, "20200703_HR_8799")
+            # A0dir = os.path.join(mykpicdir, "20200928_HR_8799")
+            # A0dir = os.path.join(mykpicdir, "20200929_HR_8799")
+            A0dir = os.path.join(mykpicdir, "20201001_HR_8799")
             A0_rv = -12.6 # HERE!!!!
             phoenix_A0_filename = glob(os.path.join(phoenix_folder, "HR_8799" + "*.fits"))[0] # HERE!!!!
             # A0dir = os.path.join(mykpicdir,"20200702_d_Sco")
             # A0_rv = -13 #km/s
+            # phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
+            # A0dir = os.path.join(mykpicdir, "20200928_HIP_6960")
+            # A0_rv = 14.1 # HERE!!!!
+            # phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
+            # A0dir = os.path.join(mykpicdir, "20200928_HIP_16322")
+            # A0_rv = 0.6 # HERE!!!!
+            # phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
+            # A0dir = os.path.join(mykpicdir, "20200928_HD_1160")
+            # A0_rv = 12.6 # HERE!!!!
+            # phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
+            # A0dir = os.path.join(mykpicdir, "20200929_lam_Cap")
+            # A0_rv = -2.4 # HERE!!!!
+            # phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
+            # A0dir = os.path.join(mykpicdir, "20200929_51_Eri")
+            # A0_rv = 12.6 # HERE!!!!
             # phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
             filelist = glob(os.path.join(A0dir, "*fluxes.fits"))
             filelist.sort()
@@ -477,7 +690,6 @@ if __name__ == "__main__":
             cp_A0_spec = copy(edges2nans(A0_spec))
             cp_A0_err = copy(edges2nans(A0_err))
 
-
             A0_spec,A0_err = cp_A0_spec[fib,selec_orders],cp_A0_err[fib,selec_orders]
             science_spec = edges2nans(science_spec)
             science_err = edges2nans(science_err)
@@ -485,8 +697,12 @@ if __name__ == "__main__":
             hdulist = pyfits.open(glob(os.path.join(sciencedir, "calib", "*_wvs.fits"))[0])
             wvs = hdulist[0].data[fib, selec_orders, :]
 
-            if 0:
-                hostdir = os.path.join(mykpicdir, "20200702_ROXs_42B")
+
+            if  "20200702_ROXs_42Bb" in sciencedir or "20200928_RX_J0342.5_1216_B" in sciencedir:
+                if "20200702_ROXs_42Bb" in sciencedir:
+                    hostdir = os.path.join(mykpicdir, "20200702_ROXs_42B")
+                elif "20200928_RX_J0342.5_1216_B" in sciencedir:
+                    hostdir = os.path.join(mykpicdir, "20200928_RX_J0342.5_1216")
                 filelist = glob(os.path.join(hostdir, "*fluxes.fits"))
                 filelist.sort()
                 print(len(filelist), filelist)
@@ -514,11 +730,6 @@ if __name__ == "__main__":
             slit1_spec[where_nans] = np.nan
             sciencehost_spec[where_nans] = np.nan
 
-
-
-
-
-
             line_width_filename = glob(os.path.join(sciencedir, "calib", "*_line_width_smooth.fits"))[0]
             hdulist = pyfits.open(line_width_filename)
             line_width = hdulist[0].data[fib,selec_orders,:]
@@ -534,9 +745,10 @@ if __name__ == "__main__":
             #     plt.subplot(Norders, 1, Norders - k)
             #     # plt.fill_between(wvs[k,:], science_spec[k,:]-science_err[k,:], science_spec[k,:]+science_err[k,:],label="Error bars",color="orange")
             #     # plt.plot(wvs[k,:], science_spec[k,:],label="spec",color="blue",linewidth=0.5)
-            #     plt.plot(wvs[k, :], science_spec[k, :] / science_err[k, :], label="spec", color="blue", linewidth=0.5)
+            #     # plt.plot(wvs[k, :], science_spec[k, :] / science_err[k, :], label="spec", color="blue", linewidth=0.5)
             #     # plt.plot(wvs[k, :], science_err[k, :], label="error", color="blue", linewidth=0.5)
-            #     # plt.plot(wvs[k, :], line_width[k, :], label="spec", color="blue", linewidth=0.5)
+            #     plt.plot(wvs[k, :], wvs[k, :]/(dwvs[k,:]*line_width[k, :]*2.634), label="spec", color="blue", linewidth=0.5)
+            #     print(k,np.nanmedian(wvs[k, :]),np.nanmedian( wvs[k, :]/(dwvs[k,:]*line_width[k, :]*2.634)))
             #     # plt.plot(wvs[k, :], wvs[k, :] /dwvs[k,:], label="spec", color="blue", linewidth=0.5)
             #     # plt.plot(wvs[k,:], sciencehost_spec[k,:],label="sciencehost",color="red",linewidth=0.5)
             #     # plt.plot(wvs[k,:], sciencehost_spec[k,:]-A0_spec[k,:]/np.nanmean(A0_spec[k,:])*np.nanmean(sciencehost_spec[k,:]),label="A0",color="green",linewidth=0.5,linestyle="--")
@@ -544,9 +756,9 @@ if __name__ == "__main__":
             #     # plt.fill_between(wvs[k,:], host_spec[k,:]-host_err[k,:], host_spec[k,:]+host_err[k,:],label="Error bars",color="orange")
             #     # plt.plot(wvs[k,:], host_spec[k,:],label="spec",color="blue",linewidth=0.5)
             #     # plt.plot(wvs[k,:], slit1_spec[k,:],label="slit background 1",alpha=0.5,color="grey")
-            #     print(np.nanstd(slit1_spec[k,:]/ science_err[k, :]))
-            #     print(np.nanstd(dark1_spec[k,:]/ science_err[k, :]))
-            #     plt.plot(wvs[k,:], dark1_spec[k,:]/ science_err[k, :],label="dark background 1",alpha=0.5,color="grey")
+            #     # print(np.nanstd(slit1_spec[k,:]/ science_err[k, :]))
+            #     # print(np.nanstd(dark1_spec[k,:]/ science_err[k, :]))
+            #     # plt.plot(wvs[k,:], dark1_spec[k,:]/ science_err[k, :],label="dark background 1",alpha=0.5,color="grey")
             #     # plt.plot(wvs[k,:], slit2_spec[k,:],label="slit background 2",alpha=0.5,linestyle="--",color="grey")
             #     # plt.plot(wvs[k,:], dark2_spec[k,:],label="dark background 2",alpha=0.5,linestyle="--",color="grey")
             #     # plt.ylim([0-10*np.nanstd(slit1_spec[k,:]),np.nanmax(science_spec[k,:])+5*np.nanmedian(science_err[k,:])])
@@ -554,7 +766,7 @@ if __name__ == "__main__":
             # plt.show()
 
             specpool = mp.Pool(processes=numthreads)
-            if "HR_8799" in sciencedir:
+            if "HR_8799" in sciencedir or ("HD_4747_B" in sciencedir and molecule is not None):
                 if molecule is not None:
                     # travis_mol_filename=os.path.join(molecular_template_folder,"lte11-4.0_hr8799c_pgs=4d6_Kzz=1d8_gs=5um."+molecule+"only.7")
                     travis_mol_filename_D2E=os.path.join(molecular_template_folder,"lte11-4.0_hr8799c_pgs=4d6_Kzz=1d8_gs=5um."+molecule+"only.7_D2E")
@@ -604,8 +816,10 @@ if __name__ == "__main__":
                         # plt.plot(oriplanet_spec_wvs,oriplanet_spec)
                         # plt.show()
                 else:
-                    print(glob(os.path.join("/scr3/jruffio/data/kpic/models/hr8799b_modelgrid/","lte12-4.0-0.0.aces_hr8799b_pgs=4d6_Kzz=1d8_C=8.38_O=8.64_gs=5um.exoCH4_hiresHK.7.D2e.sorted")))
-                    grid_filename = os.path.join("/scr3/jruffio/data/kpic/models/hr8799b_modelgrid/","lte12-4.0-0.0.aces_hr8799b_pgs=4d6_Kzz=1d8_C=8.38_O=8.64_gs=5um.exoCH4_hiresHK.7.D2e.sorted")
+                    # print(glob(os.path.join("/scr3/jruffio/data/kpic/models/hr8799b_modelgrid/","lte12-4.0-0.0.aces_hr8799b_pgs=4d6_Kzz=1d8_C=8.38_O=8.64_gs=5um.exoCH4_hiresHK.7.D2e.sorted")))
+                    # grid_filename = os.path.join("/scr3/jruffio/data/kpic/models/hr8799b_modelgrid/","lte12-4.0-0.0.aces_hr8799b_pgs=4d6_Kzz=1d8_C=8.38_O=8.64_gs=5um.exoCH4_hiresHK.7.D2e.sorted")
+                    print(glob(os.path.join("/scr3/jruffio/data/kpic/models/hr8799b_modelgrid/","lte11-3.5-0.0.aces_hr8799b_pgs=4d6_Kzz=1d8_C=8.38_O=8.64_gs=5um.exoCH4_hiresHK.7.D2e.sorted")))
+                    grid_filename = os.path.join("/scr3/jruffio/data/kpic/models/hr8799b_modelgrid/","lte11-3.5-0.0.aces_hr8799b_pgs=4d6_Kzz=1d8_C=8.38_O=8.64_gs=5um.exoCH4_hiresHK.7.D2e.sorted")
                     out = np.loadtxt(grid_filename,skiprows=0)
                     wmod = out[:,0]/1e4
                     mol_temp = 10**(out[:,1]-np.max(out[:,1]))
@@ -640,7 +854,7 @@ if __name__ == "__main__":
                     #     # plt.plot(wmod, planet_convspec)
                     #     # print("coucou")
                     #     # plt.show()
-            if "ROXs_42Bb" in sciencedir or "kap_And_B" in sciencedir:
+            if "ROXs_42Bb" in sciencedir or "kap_And_B" in sciencedir or "HD_206893_B" in sciencedir:
                 # travis_spec_filename = os.path.join("/scr3/jruffio/data/kpic/models/planets_templates/","lte2048-3.77-0.11.AGSS09.Dusty.Kzz=0.0.PHOENIX-ACES-2019_COscl=1.00_H2Oscl=1.00_CH4scl=1.0_4KPIC.7_D2E")
                 # file1 = open(travis_spec_filename, 'r')
                 # file2 = open(travis_spec_filename.replace(".7",".7_D2E"), 'w')
@@ -731,7 +945,7 @@ if __name__ == "__main__":
                 # plt.show()
                 # exit()
 
-            if "DH_Tau_B" in sciencedir or "HR_7672_B" in sciencedir:  # HERE!!!!
+            if "DH_Tau_B" in sciencedir or "HR_7672_B" in sciencedir or "HD_1160_B" in sciencedir or "20200928_RX_J0342.5_1216_B" in sciencedir:# or "HD_4747_B" in sciencedir:  # HERE!!!!
                 with open("/scr3/jruffio/data/kpic/models/planets_templates/lte018-5.0-0.0a+0.0.BT-Settl.spec.7", 'r') as f:
                     model_wvs = []
                     model_fluxes = []
@@ -754,8 +968,34 @@ if __name__ == "__main__":
                     pl_pixel_widths = np.array(pd.DataFrame(pixel_width_func(model_wvs)).interpolate(method="linear").fillna(method="bfill").fillna(method="ffill"))[:, 0]
                     planet_convspec = convolve_spectrum_line_width(model_wvs,model_fluxes,pl_line_widths,mypool=specpool)
                     planet_convspec = convolve_spectrum_pixel_width(model_wvs,planet_convspec,pl_pixel_widths,mypool=specpool)
+                else:
+                    planet_convspec = model_fluxes
                 planet_convspec /= np.nanmean(planet_convspec)
                 science_model_spline = interpolate.splrep(model_wvs, planet_convspec)
+            if "51_Eri_b" in sciencedir:
+
+                import scipy.io as scio
+                travis_spectrum = scio.readsav("/scr3/jruffio/data/kpic/models/planets_templates/51Eri_b_highres_template.save")
+                ori_planet_spec = np.array(travis_spectrum["flux"])
+                wmod = np.array(travis_spectrum["wave"])
+                crop_moltemp = np.where((wmod>1.8-(2.6-1.8)/2)*(wmod<2.6+(2.6-1.8)/2))
+                wmod = wmod[crop_moltemp]
+                ori_planet_spec = ori_planet_spec[crop_moltemp]
+
+                # plt.plot(wmod,ori_planet_spec)
+                # plt.show()
+
+                if 1:
+                    pl_line_widths = np.array(
+                        pd.DataFrame(line_width_func(wmod)).interpolate(method="linear").fillna(method="bfill").fillna(
+                            method="ffill"))[:, 0]
+                    # pl_pixel_widths = np.array(
+                    #     pd.DataFrame(pixel_width_func(wmod)).interpolate(method="linear").fillna(method="bfill").fillna(
+                    #         method="ffill"))[:, 0]
+                    planet_convspec = convolve_spectrum_line_width(wmod, ori_planet_spec, pl_line_widths, mypool=specpool)
+                    # planet_convspec = convolve_spectrum_pixel_width(wmod, planet_convspec, pl_pixel_widths, mypool=specpool)
+
+                science_model_spline = interpolate.splrep(wmod, planet_convspec)
 
             phoenix_wv_filename = os.path.join(phoenix_folder, "WAVE_PHOENIX-ACES-AGSS-COND-2011.fits")
             with pyfits.open(phoenix_wv_filename) as hdulist:
@@ -876,12 +1116,12 @@ if __name__ == "__main__":
 
 
                 print("Starting fit ")
-                a,c,b,d = _fitRV((vsini_list[0], wvs, science_spec_hpf, science_spec_lpf, sciencehost_spec_hpf, sciencehost_spec_lpf, science_err, slit1_spec_hpf, dark1_spec_hpf, dark2_spec_hpf, \
-                wvs4broadening, planet_convspec_broadsampling, A0_spec, phoenix_A0_func, phoenix_host_func, \
-                A0_rv, A0_baryrv, host_rv, science_baryrv, c_kms, cutoff, rv_list))
-                print(a)
-                print(b)
-                exit()
+                # a,c,b,d = _fitRV((vsini_list[0], wvs, science_spec_hpf, science_spec_lpf, sciencehost_spec_hpf, sciencehost_spec_lpf, science_err, slit1_spec_hpf, dark1_spec_hpf, dark2_spec_hpf, \
+                # wvs4broadening, planet_convspec_broadsampling, A0_spec, phoenix_A0_func, phoenix_host_func, \
+                # A0_rv, A0_baryrv, host_rv, science_baryrv, c_kms, cutoff, rv_list))
+                # print(a)
+                # print(b)
+                # exit()
                 outputs_list = specpool.map(_fitRV, zip(vsini_list,
                                                         itertools.repeat(wvs),
                                                         itertools.repeat(science_spec_hpf),
@@ -930,6 +1170,7 @@ if __name__ == "__main__":
 
             if molecule is not None:
                 out = out.replace(".fits", "_" + molecule + ".fits")
+            # out = out.replace(".fits", "_test.fits")
 
             if save:
                 hdulist = pyfits.HDUList()
@@ -943,7 +1184,7 @@ if __name__ == "__main__":
                 except TypeError:
                     hdulist.writeto(out, clobber=True)
                 hdulist.close()
-                # exit()
+        exit()
     else:
         order_suffix = ""
         for myorder in selec_orders:
@@ -953,8 +1194,13 @@ if __name__ == "__main__":
         if combined:
             out = os.path.join(sciencedir, "out", "flux_and_posterior"+order_suffix+".fits")
         else:
-            raise (Exception())
+            out_list = glob(os.path.join(sciencedir, "out", "nspec*"+order_suffix+".fits"))
+            # out_list = glob(os.path.join(sciencedir, "out", "nspec*"+order_suffix+"_test.fits"))
+            out_list.sort()
+            # raise (Exception())
             # out = os.path.join(os.path.dirname(sciencefilename), "out",os.path.basename(sciencefilename).replace(".fits","_flux_and_posterior.fits"))
+    fontsize = 12
+    if combined:
         with pyfits.open(out) as hdulist:
             fluxout = hdulist[0].data
             dAICout = hdulist[1].data
@@ -962,92 +1208,235 @@ if __name__ == "__main__":
             vsini_list = hdulist[3].data
             rv_list = hdulist[4].data
 
-    print("scaling factor",np.min(fluxout[2,0,:,:]),np.max(fluxout[2,0,:,:]))
-    argmaxvsini, argmaxrv = np.unravel_index(np.argmax(logpostout[0, :, :]), logpostout[0, :, :].shape)
-    argmaxvsini = 0
-    print(np.max(logpostout[0,:,:]),logpostout[0,argmaxvsini, argmaxrv])
-    _fluxout = fluxout[0, :, argmaxvsini, :]  # /np.nanstd(fluxout[3::,argmaxvsini,:])
-    _fluxout_err = fluxout[1, :, argmaxvsini, :]  # /np.nanstd(fluxout[3::,argmaxvsini,:])
-    legend_list = ["data",
-                   "simulated (i.e., auto correl.)",
-                   "background 1",
-                   "dark 1",
-                   "dark 2"]
-    linestyle_list = ["-", "-", "--", ":", ":"]
-    color_list = ["orange", "blue", "black", "grey", "grey"]
-    plt.figure(1, figsize=(16, 8))
-    plt.subplot(2, 2, 1)
-    for data_id, (name, ls, c) in enumerate(zip(legend_list, linestyle_list, color_list)):
-        # if data_id == 1:
-        #     continue
-        plt.fill_between(rv_list, fluxout[0, data_id, argmaxvsini, :] - fluxout[1, data_id, argmaxvsini, :],
-                         fluxout[0, data_id, argmaxvsini, :] + fluxout[1, data_id, argmaxvsini, :], color=c,
-                         alpha=0.5)
-        plt.plot(rv_list, fluxout[0, data_id, argmaxvsini, :], alpha=1, label=name, linestyle=ls, color=c)
-    plt.ylabel("Flux")
-    plt.xlabel("rv (km/s)")
-    plt.legend()
-    print(argmaxvsini)
-    print(fluxout[0, :, argmaxvsini, :].shape)
-    print(np.size(np.where(np.abs(rv_list) > 200)[0]))
-    print(fluxout[0, :, argmaxvsini, np.where(np.abs(rv_list) > 200)[0]].shape)
-    print(np.nanmean(fluxout[0, :, argmaxvsini, np.where(np.abs(rv_list) > 200)[0]], axis=1).shape)
-    _fluxout = fluxout[0, :, argmaxvsini, :] - np.nanmean(
-        fluxout[0, :, argmaxvsini, np.where(np.abs(rv_list) > 200)[0]], axis=0)[:, None]
-    print(_fluxout.shape)
-    # _fluxout[2,:] = np.nan
-    # _fluxout = _fluxout/np.nanstd(_fluxout[2,:])
-    plt.subplot(2, 2, 2)
-    for data_id, (name, ls, c) in enumerate(zip(legend_list, linestyle_list, color_list)):
-        if data_id == 1:
-            continue
-        # plt.fill_between(rv_list,_fluxout[data_id,:]-fluxout[1,data_id,argmaxvsini,:],_fluxout[data_id,:]+fluxout[1,data_id,argmaxvsini,:],color=c,alpha=0.5)
-        if data_id >= 2:
-            sig = r" ($\sigma=${0:0.1f})".format(
-                np.nanstd(_fluxout[data_id, :] / fluxout[1, data_id, argmaxvsini, :]))
-        else:
+        print("scaling factor",np.min(fluxout[2,0,:,:]),np.max(fluxout[2,0,:,:]))
+        argmaxvsini, argmaxrv = np.unravel_index(np.argmax(logpostout[0, :, :]), logpostout[0, :, :].shape)
+        # argmaxvsini = 0
+        # argmaxvsini = 0
+        print(np.max(logpostout[0,:,:]),logpostout[0,argmaxvsini, argmaxrv])
+        _fluxout = fluxout[0, :, argmaxvsini, :]  # /np.nanstd(fluxout[3::,argmaxvsini,:])
+        _fluxout_err = fluxout[1, :, argmaxvsini, :]  # /np.nanstd(fluxout[3::,argmaxvsini,:])
+        legend_list = ["data",
+                       "Auto correlation",
+                       "Background",
+                       "Dark",
+                       "Dark"]
+        linestyle_list = ["-",
+                          "-",
+                          "--", ":", ":"]
+        color_list = ["orange",
+                      "blue",
+                      "black", "grey", "grey"]
+        plt.figure(1, figsize=(12, 8))
+        plt.subplot(2, 2, 1)
+        for data_id, (name, ls, c) in enumerate(zip(legend_list, linestyle_list, color_list)):
+            # if data_id == 1:
+            #     continue
+            if name == "Auto correlation":
+                plt.plot(rv_list, fluxout[0, data_id, 0, :]/np.max(fluxout[0, data_id, 0, :])*np.max(fluxout[0, 0, 0, :]),
+                         alpha=1, label=name, linestyle=ls, color=c)
+            else:
+                if data_id <= len(legend_list)-3:
+                    plt.fill_between(rv_list, fluxout[0, data_id, 0, :] - fluxout[1, data_id, 0, :],
+                                     fluxout[0, data_id, 0, :] + fluxout[1, data_id, 0, :], color=c,
+                                     alpha=0.5)
+                plt.plot(rv_list, fluxout[0, data_id, 0, :], alpha=1, label=name, linestyle=ls, color=c)
+        plt.ylabel("Flux")
+        plt.xlabel("rv (km/s)")
+        plt.legend()
+        print(argmaxvsini,vsini_list[argmaxvsini])
+        print(fluxout[0, :, argmaxvsini, :].shape)
+        print(np.size(np.where(np.abs(rv_list) > 200)[0]))
+        print(fluxout[0, :, argmaxvsini, np.where(np.abs(rv_list) > 200)[0]].shape)
+        print(np.nanmean(fluxout[0, :, argmaxvsini, np.where(np.abs(rv_list) > 200)[0]], axis=1).shape)
+        _fluxout = fluxout[0, :, argmaxvsini, :] - np.nanmean(
+            fluxout[0, :, argmaxvsini, np.where(np.abs(rv_list) > 200)[0]], axis=0)[:, None]
+        print(_fluxout.shape)
+        # _fluxout[2,:] = np.nan
+        # _fluxout = _fluxout/np.nanstd(_fluxout[2,:])
+        plt.subplot(2, 2, 2)
+        for data_id, (name, ls, c) in enumerate(zip(legend_list, linestyle_list, color_list)):
+            if data_id == 1:
+                continue
+            # plt.fill_between(rv_list,_fluxout[data_id,:]-fluxout[1,data_id,argmaxvsini,:],_fluxout[data_id,:]+fluxout[1,data_id,argmaxvsini,:],color=c,alpha=0.5)
+            if data_id >= 2:
+                sig = r" ($\sigma=${0:0.1f})".format(
+                    np.nanstd(_fluxout[data_id, :] / fluxout[1, data_id, argmaxvsini, :]))
+            else:
+                sig = ""
+            plt.plot(rv_list, _fluxout[data_id, :] / fluxout[1, data_id, argmaxvsini, :], alpha=1, label=name + sig,
+                     linestyle=ls, color=c)
+        plt.ylabel("SNR")
+        plt.xlabel("rv (km/s)")
+        # plt.ylim([-3,5])
+        plt.legend()
+        # plt.subplot(2, 3, 3)
+        # plt.imshow(fluxout[2,0,:,:],interpolation="nearest",origin="lower",extent=[rv_list[0],rv_list[-1],vsini_list[0],vsini_list[-1]])
+        # plt.xlabel("RV (km/s)")
+        # plt.xlabel("vsin(i) (km/s)")
+        # plt.colorbar()
+
+        post = np.exp(logpostout[0, :, :] - np.nanmax(logpostout[0, :, :]))
+        dvsini_list = vsini_list[1::]-vsini_list[0:np.size(vsini_list)-1]
+        dvsini_list = np.insert(dvsini_list,0,[dvsini_list[0]])
+        drv_list = rv_list[1::]-rv_list[0:np.size(rv_list)-1]
+        drv_list = np.insert(drv_list,0,[drv_list[0]])
+        print(np.size(dvsini_list),np.size(vsini_list))
+        print(np.size(drv_list),np.size(rv_list))
+
+        rvpost = np.nansum(post*dvsini_list[:,None], axis=0)
+        vsinipost = np.nansum(post*drv_list[None,:], axis=1)
+        vsinicdf = np.cumsum(vsinipost*dvsini_list)
+        lb_rv,max_rv,rb_rv,_ =get_err_from_posterior(rv_list,rvpost*drv_list)
+        max_rv = np.array(max_rv)
+        lerr_rv = np.array(max_rv) - np.array(lb_rv)
+        rerr_rv = np.array(rb_rv) - np.array(max_rv)
+        print("rv",max_rv,lerr_rv,rerr_rv)
+        lb_vsini,max_vsini,rb_vsini,_ =get_err_from_posterior(vsini_list,vsinipost*dvsini_list)
+        max_vsini = np.array(max_vsini)
+        lerr_vsini = np.array(max_vsini) - np.array(lb_vsini)
+        rerr_vsini = np.array(rb_vsini) - np.array(max_vsini)
+        print("vsini",max_vsini,lerr_vsini,rerr_vsini)
+        vsinipost_f = interp1d(vsini_list, vsinipost / np.nanmax(vsinipost), bounds_error=False,
+                                     fill_value=np.nan)
+        rvpost_f = interp1d(rv_list, rvpost / np.nanmax(rvpost), bounds_error=False,
+                                     fill_value=np.nan)
+
+        plt.subplot(2, 2, 3)
+        plt.plot(rv_list, rvpost / np.nanmax(rvpost))
+        plt.plot([lb_rv,lb_rv],[0,rvpost_f(lb_rv)],color="gray",linewidth=1,linestyle="--")
+        plt.plot([max_rv,max_rv],[0,rvpost_f(max_rv)],color="black",linewidth=1,linestyle="-")
+        plt.plot([rb_rv,rb_rv],[0,rvpost_f(rb_rv)],color="gray",linewidth=1,linestyle="--")
+        plt.xlim([-50,50])
+        plt.ylim([0,1.1])
+        plt.xlabel("RV (km/s)",fontsize = fontsize)
+        plt.ylabel("$\propto \mathcal{P}(RV|d)$",fontsize=fontsize)
+        plt.tick_params(axis="x",labelsize=fontsize)
+        plt.tick_params(axis="y",labelsize=fontsize)
+        plt.gca().text(max_rv+0.25,1,"${0:.1f}\pm {1:.1f}$ km/s".format(max_rv,np.max([lerr_rv,rerr_rv])),ha="left",va="bottom",rotation=0,size=fontsize,color="black")
+        plt.subplot(2, 2, 4)
+        plt.plot(vsini_list, vsinipost / np.nanmax(vsinipost),label="PDF")
+        plt.plot([lb_vsini,lb_vsini],[0,vsinipost_f(lb_vsini)],color="gray",linewidth=1,linestyle="--")
+        plt.plot([max_vsini,max_vsini],[0,vsinipost_f(max_vsini)],color="black",linewidth=1,linestyle="-")
+        plt.plot([rb_vsini,rb_vsini],[0,vsinipost_f(rb_vsini)],color="gray",linewidth=1,linestyle="--")
+        plt.xlim([0,50])
+        plt.ylim([0,1.1])
+        plt.xlabel("vsin(i) (km/s)",fontsize = fontsize)
+        plt.ylabel("$\propto \mathcal{P}(vsin(i)|d)$",fontsize=fontsize)
+        plt.tick_params(axis="x",labelsize=fontsize)
+        plt.tick_params(axis="y",labelsize=fontsize)
+        plt.gca().text(max_vsini+0.25,1,"${0:.1f}\pm {1:.1f}$ km/s".format(max_vsini,np.max([lerr_vsini,rerr_vsini])),ha="left",va="bottom",rotation=0,size=fontsize,color="black")
+        # plt.plot(vsini_list, vsinicdf / np.nanmax(vsinicdf),label="CDF")
+        # plt.legend()
+        # plt.subplot(2, 3, 6)
+        # plt.imshow(logpostout[0,:,:],interpolation="nearest",origin="lower",extent=[rv_list[0],rv_list[-1],vsini_list[0],vsini_list[-1]])
+        # plt.xlabel("RV (km/s)")
+        # plt.xlabel("vsin(i) (km/s)")
+        # plt.colorbar()
+
+        if 1:
+            print("Saving " + out.replace(".fits",".png"))
+            plt.savefig(out.replace(".fits",".png"))
+            plt.savefig(out.replace(".fits",".pdf"))
+    else:
+
+        plt.figure(1, figsize=(16, 8))
+        plt.subplot(2, 2, 1)
+        out_comb = os.path.join(sciencedir, "out", "flux_and_posterior" + order_suffix + ".fits")
+        with pyfits.open(out_comb) as hdulist:
+            fluxout = hdulist[0].data
+            dAICout = hdulist[1].data
+            logpostout = hdulist[2].data
+            vsini_list = hdulist[3].data
+            rv_list = hdulist[4].data
+        argmaxvsini = 0
+        comb_CCF = fluxout[0, 0, argmaxvsini, :]
+        plt.plot(rv_list, comb_CCF, alpha=1, label="combined", linestyle="-",
+                 color="black", linewidth=3)
+        plt.plot(rv_list, fluxout[0, 1, argmaxvsini, :]/np.max(fluxout[0, 1, argmaxvsini, :])*np.max(fluxout[0, 0, argmaxvsini, :]), alpha=1, label="autocorrel", linestyle="--",
+                 color="black", linewidth=3)
+
+        a_list = []
+        linestyle_list = ["-", "-.", "--", ":","-", "-.", "--", ":", "-", "-.", "--", ":"]
+        color_list = ["orange", "blue","red", "green",  "black", "purple", "grey","pink","yellow","brown"]
+        for outid,(out, ls, c) in enumerate(zip(out_list,linestyle_list,color_list)):
+            plt.figure(1, figsize=(16, 8))
+            name = "data "+os.path.basename(out).split("_fluxes")[0]
+            with pyfits.open(out) as hdulist:
+                fluxout = hdulist[0].data
+                dAICout = hdulist[1].data
+                logpostout = hdulist[2].data
+                vsini_list = hdulist[3].data
+                rv_list = hdulist[4].data
+
+            print("scaling factor",np.min(fluxout[2,0,:,:]),np.max(fluxout[2,0,:,:]))
+            argmaxvsini, argmaxrv = np.unravel_index(np.argmax(logpostout[0, :, :]), logpostout[0, :, :].shape)
+            argmaxvsini = 0
+            print(np.max(logpostout[0,:,:]),logpostout[0,argmaxvsini, argmaxrv])
+            _fluxout = fluxout[0, :, argmaxvsini, :]  # /np.nanstd(fluxout[3::,argmaxvsini,:])
+            _fluxout_err = fluxout[1, :, argmaxvsini, :]  # /np.nanstd(fluxout[3::,argmaxvsini,:])
+            plt.subplot(2, 2, 1)
+            data_id = 0
+            plt.fill_between(rv_list, fluxout[0, data_id, argmaxvsini, :] - fluxout[1, data_id, argmaxvsini, :],
+                             fluxout[0, data_id, argmaxvsini, :] + fluxout[1, data_id, argmaxvsini, :], color=c,
+                             alpha=0.1)
+            # plt.plot(rv_list, fluxout[0, data_id, argmaxvsini, :], alpha=1, label=name, linestyle=ls, color=c)
+            plt.ylabel("Flux")
+            plt.xlabel("rv (km/s)")
+            # plt.xlim([-100,100])
+            plt.legend()
+
+
+            _fluxout = fluxout[0, :, argmaxvsini, :] #- np.nanmean(
+                #fluxout[0, :, argmaxvsini, np.where(np.abs(rv_list) > 2)[0]], axis=0)[:, None]
+            print(_fluxout.shape)
+            plt.subplot(2, 2, 2)
+            data_id = 0
             sig = ""
-        plt.plot(rv_list, _fluxout[data_id, :] / fluxout[1, data_id, argmaxvsini, :], alpha=1, label=name + sig,
-                 linestyle=ls, color=c)
-    plt.ylabel("SNR")
-    plt.xlabel("rv (km/s)")
-    # plt.ylim([-3,5])
-    plt.legend()
-    # plt.subplot(2, 3, 3)
-    # plt.imshow(fluxout[2,0,:,:],interpolation="nearest",origin="lower",extent=[rv_list[0],rv_list[-1],vsini_list[0],vsini_list[-1]])
-    # plt.xlabel("RV (km/s)")
-    # plt.xlabel("vsin(i) (km/s)")
-    # plt.colorbar()
+            plt.plot(rv_list, _fluxout[data_id, :] / fluxout[1, data_id, argmaxvsini, :], alpha=1, label=name + sig,
+                     linestyle=ls, color=c)
+            plt.ylabel("SNR")
+            plt.xlabel("rv (km/s)")
+            plt.xlim([-100,100])
+            plt.legend()
 
-    post = np.exp(logpostout[0, :, :] - np.nanmax(logpostout[0, :, :]))
-    dvsini_list = vsini_list[1::]-vsini_list[0:np.size(vsini_list)-1]
-    dvsini_list = np.insert(dvsini_list,0,[dvsini_list[0]])
-    drv_list = rv_list[1::]-rv_list[0:np.size(rv_list)-1]
-    drv_list = np.insert(drv_list,0,[drv_list[0]])
-    print(np.size(dvsini_list),np.size(vsini_list))
-    print(np.size(drv_list),np.size(rv_list))
-    plt.subplot(2, 2, 3)
-    rvpost = np.nansum(post*dvsini_list[:,None], axis=0)
-    plt.plot(rv_list, rvpost / np.nanmax(rvpost))
-    plt.xlabel("RV (km/s)")
-    plt.xlim([-25,10])
-    plt.subplot(2, 2, 4)
-    vsinipost = np.nansum(post*drv_list[None,:], axis=1)
-    plt.plot(vsini_list, vsinipost / np.nanmax(vsinipost),label="PDF")
-    vsinicdf = np.cumsum(vsinipost*dvsini_list)
-    plt.plot(vsini_list, vsinicdf / np.nanmax(vsinicdf),label="CDF")
-    plt.legend()
-    plt.xlabel("vsin(i) (km/s)")
-    # plt.subplot(2, 3, 6)
-    # plt.imshow(logpostout[0,:,:],interpolation="nearest",origin="lower",extent=[rv_list[0],rv_list[-1],vsini_list[0],vsini_list[-1]])
-    # plt.xlabel("RV (km/s)")
-    # plt.xlabel("vsin(i) (km/s)")
-    # plt.colorbar()
+            plt.subplot(2, 2, 3)
+            data_id = 0
+            print(fluxout.shape)
+            plt.fill_between(rv_list, fluxout[0, data_id, argmaxvsini, :]-comb_CCF - fluxout[1, data_id, argmaxvsini, :],
+                             fluxout[0, data_id, argmaxvsini, :]-comb_CCF + fluxout[1, data_id, argmaxvsini, :], color=c,
+                             alpha=0.1)
+            # plt.plot(rv_list, fluxout[0, data_id, argmaxvsini, :]-comb_CCF, alpha=1, label=name, linestyle=ls, color=c)
+            plt.ylabel("$\Delta$Flux")
+            plt.xlabel("rv (km/s)")
+            plt.xlim([-100,100])
+            plt.legend()
 
-    if 1:
-        print("Saving " + out.replace(".fits",".png"))
-        plt.savefig(out.replace(".fits",".png"))
-        plt.savefig(out.replace(".fits",".pdf"))
+            plt.figure(2, figsize=(16, 8))
+            plt.subplot(2, 5, outid+1)
+            data_id = 0
+            a =  fluxout[0, data_id, argmaxvsini, :]-comb_CCF
+            a -= np.nanmedian(a)
+            a_list.append(a[np.where((rv_list>-50)*(rv_list<50))][None,:])
+            plt.fill_between(rv_list, a - fluxout[1, data_id, argmaxvsini, :],
+                             a + fluxout[1, data_id, argmaxvsini, :], color=c,
+                             alpha=1)
+            # plt.plot(rv_list, fluxout[0, data_id, argmaxvsini, :]-comb_CCF, alpha=1, label=name, linestyle=ls, color=c)
+            plt.ylabel("$\Delta$Flux")
+            plt.xlabel("rv (km/s)")
+            plt.xlim([-50,50])
+            plt.ylim([-0.00075,0.00075])
 
+            river_im = np.concatenate(a_list,axis=0)
+            plt.figure(3)
+            plt.scatter(rv_list,outid*10+np.zeros(rv_list.shape),c=a,alpha=1,s=100 )
+            plt.xlim([-50,50])
+            plt.clim([-0.00075,0.00075])
+            plt.ylabel("time (min)")
+            plt.xlabel("RV")
+
+        if 1:
+            print("Saving " + out.replace(".fits",".png"))
+            plt.savefig(out.replace(".fits",".png"))
+            plt.savefig(out.replace(".fits",".pdf"))
 
     plt.show()

@@ -14,8 +14,8 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from scipy.interpolate import interp2d
 from scipy.interpolate import InterpolatedUnivariateSpline
-from utils.spectra import *
-from utils.misc import *
+from jbdrp.utils_2020.spectra import *
+from jbdrp.utils_2020.misc import *
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation
 from astropy import units as u

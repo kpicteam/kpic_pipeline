@@ -9,7 +9,7 @@ from scipy.signal import correlate2d
 from copy import copy
 from scipy.interpolate import interp1d
 from scipy.ndimage.filters import convolve
-from utils.badpix import *
+from jbdrp.utils_2020.badpix import *
 
 if __name__ == "__main__":
     try:
@@ -29,7 +29,10 @@ if __name__ == "__main__":
     # mydir = os.path.join(mykpicdir,"20200608_backgrounds")
     # mydir = os.path.join(mykpicdir,"20200609_backgrounds")
     # mydir = os.path.join(mykpicdir,"20200701_backgrounds")
-    mydir = os.path.join(mykpicdir,"20200702_backgrounds")
+    # mydir = os.path.join(mykpicdir,"20200702_backgrounds")
+    # mydir = os.path.join(mykpicdir,"20200926_backgrounds")
+    # mydir = os.path.join(mykpicdir,"20200928_backgrounds")
+    mydir = os.path.join(mykpicdir,"20201001_backgrounds")
     readnoisebar = False
 
 

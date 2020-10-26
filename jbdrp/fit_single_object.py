@@ -208,7 +208,7 @@ if __name__ == "__main__":
     c_kms = 299792.458
     vsini_list = np.linspace(0,100,32,endpoint=True)
     # vsini_list = np.array([0,1])
-    rv_list = np.concatenate([np.arange(-400, -20, 5), np.arange(-20,20, 0.1), np.arange(20, 400, 5)], axis=0)
+    rv_list = np.concatenate([np.arange(-400, -20, 5), np.arange(-20,20, 1), np.arange(20, 400, 5)], axis=0)
     # rv_list = np.concatenate([np.arange(-400, -55.567-3, 5), np.arange(-3-55.567, 3-55.567, 0.01), np.arange(3-55.567, 400, 5)], axis=0)
     # rv_list = np.concatenate([np.arange(-400, -85.391-3, 5), np.arange(-3-85.391, 3-85.391, 0.01), np.arange(3-85.391, 400, 5)], axis=0)
     # rv_list = np.concatenate([np.arange(-400, 55-10, 5), np.arange(55-10, 55+10, 0.1), np.arange(55+10, 400, 5)], axis=0)
@@ -235,14 +235,16 @@ if __name__ == "__main__":
         # A0dir = os.path.join(mykpicdir,"20200608_d_Sco")
         # A0dir = os.path.join(mykpicdir,"20200609_d_Sco")
         # A0dir = os.path.join(mykpicdir,"20200702_d_Sco")
-        A0dir = os.path.join(mykpicdir,"20200703_d_Sco")
-        A0_rv = -13 #km/s
+        # A0dir = os.path.join(mykpicdir,"20200703_d_Sco")
+        # A0_rv = -13 #km/s
         # A0dir = os.path.join(mykpicdir,"20200702_15_Sgr")
         # A0_rv = -6 #km/s
         # A0dir = os.path.join(mykpicdir,"20200607_5_Vul")
         # A0_rv = -21.2 #km/s
         # A0dir = os.path.join(mykpicdir,"20200701_15_Sgr")
         # A0_rv = -6 #km/s
+        A0dir = os.path.join(mykpicdir,"20200928_HIP_18717")
+        A0_rv = 28.5 #km/s
         phoenix_A0_filename = glob(os.path.join(phoenix_folder, "kap_And" + "*.fits"))[0]
         filelist = glob(os.path.join(A0dir, "*fluxes.fits"))
         A0_spec,A0_err,_,_,A0_baryrv = combine_spectra_from_folder(filelist,"star")
@@ -279,8 +281,9 @@ if __name__ == "__main__":
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42B_daytime") #[ 15.93993899 305.19731602  15.53791296  14.55284422]
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42B_fit") #[ 14.45913059 304.17032175  14.0525108   13.23600295]
         # sciencedir = os.path.join(mykpicdir,"20200702_ROXs_42B_chopping") #[ 71.24556938 316.18770182 167.29706758  59.05578673]
-        sciencedir = os.path.join(mykpicdir,"20200703_ROXs_12B")
+        # sciencedir = os.path.join(mykpicdir,"20200703_ROXs_12B")
         # sciencedir = os.path.join(mykpicdir,"20200703_ROXs_12B_chopping")
+        sciencedir = os.path.join(mykpicdir,"20200928_DH_Tau_B")
         filelist = glob(os.path.join(sciencedir, "*fluxes.fits"))
         filelist.sort()
         # filelist = [filelist[0],filelist[2],filelist[4],filelist[6],filelist[8]]
@@ -323,7 +326,7 @@ if __name__ == "__main__":
 
             hdulist = pyfits.open(glob(os.path.join(sciencedir, "calib", "*_wvs.fits"))[0])
             wvs = hdulist[0].data[fib,selec_orders,:]
-            #
+
             # print(wvs.shape,science_spec.shape)
             # for k in range(Norders):
             #     plt.subplot(Norders,1,Norders-k)
@@ -335,9 +338,9 @@ if __name__ == "__main__":
             #     # plt.plot(wvs[k,:], dark1_spec[k,:],label="dark background 1",alpha=0.5,color="grey")
             #     # plt.plot(wvs[k,:], slit2_spec[k,:],label="slit background 2",alpha=0.5,linestyle="--",color="grey")
             #     # plt.plot(wvs[k,:], dark2_spec[k,:],label="dark background 2",alpha=0.5,linestyle="--",color="grey")
-            #     plt.ylim([0,120])
+            #     # plt.ylim([0,120])
             #     # plt.ylim([0-10*np.nanstd(slit1_spec[k,:]),np.nanmax(science_spec[k,:])+5*np.nanmedian(science_err[k,:])])
-            # plt.legend()
+            #     plt.legend()
             # plt.show()
 
 
