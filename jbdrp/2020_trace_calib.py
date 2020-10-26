@@ -115,19 +115,95 @@ def _fit_trace(paras):
     return out,residuals
 
 
-fiber1 = np.array(
-    [[70, 150], [260, 330], [460, 520], [680 - 10, 720 + 10], [900 - 15, 930 + 15], [1120 - 5, 1170 + 5],
-     [1350, 1420], [1600, 1690], [1870, 1980]]) + 15
-fiber2 = np.array(
-    [[50, 133], [240, 320], [440, 510], [650, 710], [880 - 15, 910 + 15], [1100 - 5, 1150 + 5], [1330, 1400],
-     [1580, 1670], [1850, 1960]]) + 15
-fiber3 = np.array(
-    [[30, 120], [220, 300], [420, 490], [640 - 5, 690 + 5], [865 - 20, 890 + 20], [1090 - 10, 1130 + 10],
-     [1320, 1380], [1570, 1650], [1840, 1940]]) + 10
-fiber4 = np.array(
-    [[30, 120], [220, 300], [420, 490], [640 - 5, 690 + 5], [865 - 20, 890 + 20], [1090 - 10, 1130 + 10],
-     [1320, 1380], [1570, 1650], [1840, 1940]]) - 10
-fibers = {0: fiber1, 1: fiber2, 2: fiber3, 3: fiber4}
+from scipy.signal import find_peaks
+
+def tophat(x, hat_left, hat_right):
+    if hat_right<hat_left:
+        return np.zeros(np.size(x))+np.inf
+    else:
+        return np.where((hat_left < x) & (x < hat_right), 1, 0)
+
+def objective(params, x, y):
+    return np.sum(np.abs(tophat(x, *params) - y))
+
+def fibers_guess(im_list,N_order = 9):
+    """
+    Find first guess position of the traces from a list of images.
+
+    Args:
+        filelist: list of images (ny,nx). There should be at least one image per fiber.
+            The order of the images does not matter.
+        N_order: Number of orders in the image
+
+    Returns:
+        fibers: Dictionary with rough location of the traces for each order and fiber.
+            Fiber 1: fibers[0] = [[row1,row2],[row3,row4],...]
+                With [row1,row2] defining the bounds of order 1, then [row3,row4] for order 2, etc.
+            Fiber 2: fibers[1] = etc.
+    """
+
+    corr = np.zeros((len(im_list),len(im_list)))
+    im_norm_list = [np.sqrt(np.nansum(im1**2)) for im1 in im_list]
+    for k,im1 in enumerate(im_list):
+        for l,im2 in enumerate(im_list):
+            corr[k,l] = np.nansum(im1*im2)/(im_norm_list[k]*im_norm_list[l])
+    sorted_files = []
+    while np.sum(corr) != 0:
+        ids = np.where(corr[:,np.where(np.nansum(corr,axis=0)!=0)[0][0]]>0.9)[0]
+        sorted_files.append(ids)
+        corr[ids,:] = 0
+        corr[:,ids] = 0
+
+    im_list = np.array(im_list)
+    fibers_unsorted = {}
+    for k,file_ids in enumerate(sorted_files):
+        im = np.nanmedian(im_list[file_ids,:,:],axis=0)
+        background_cutoff = np.percentile(im[np.where(np.isfinite(im))],97)
+        im[np.where(im<background_cutoff)] = 0
+        flattened = np.nanmean(im,axis=1)
+        peaks = find_peaks(flattened,distance=120)[0]#,width=[2,None],plateau_size=None
+        peaks_val = np.array([flattened[peak] for peak in peaks])
+        peaks = peaks[np.argsort(peaks_val)[::-1][0:N_order]]
+        peaks = np.sort(peaks)
+        x = np.arange(np.size(flattened))
+        w = 100
+        fiber_guess = []
+        for peak in peaks:
+            guess = np.array([peak-15,peak+15])
+            left,right = np.nanmax([0,peak-w]),np.nanmin([peak+w,np.size(flattened)-1])
+            simplex_init_steps = [10,10]
+            initial_simplex = np.concatenate([guess[None,:],guess[None,:] + np.diag(simplex_init_steps)],axis=0)
+            res = minimize(objective, guess, args=(x[left:right], 2*flattened[left:right]/flattened[peak]), method='Nelder-Mead',
+                   options={"xatol": 1e-6, "maxiter": 1e5,"initial_simplex":initial_simplex,"disp":False})
+            # fiber_guess.append([int(np.round(res.x[0])),int(np.round(res.x[1]))])
+            fiber_guess.append(np.round(res.x).astype(np.int))
+            # print(res.x,np.round(res.x).astype(np.int))
+            # fiber_guess.append(res.x)
+            # plt.plot(x[left:right], tophat(x[left:right], *(res.x))*flattened[peak])
+            # plt.plot(x[left:right],flattened[left:right])
+        fibers_unsorted[k] = fiber_guess
+    # plt.show()
+    sorted_fib = np.argsort([np.nanmean(myvals) for myvals in fibers_unsorted.values()])
+
+    fibers = {}
+    for k,argfib in enumerate(sorted_fib):
+        fibers[k] = np.array(fibers_unsorted[argfib])
+
+    return fibers
+
+# fiber1 = np.array(
+#     [[70, 150], [260, 330], [460, 520], [680 - 10, 720 + 10], [900 - 15, 930 + 15], [1120 - 5, 1170 + 5],
+#      [1350, 1420], [1600, 1690], [1870, 1980]]) + 15
+# fiber2 = np.array(
+#     [[50, 133], [240, 320], [440, 510], [650, 710], [880 - 15, 910 + 15], [1100 - 5, 1150 + 5], [1330, 1400],
+#      [1580, 1670], [1850, 1960]]) + 15
+# fiber3 = np.array(
+#     [[30, 120], [220, 300], [420, 490], [640 - 5, 690 + 5], [865 - 20, 890 + 20], [1090 - 10, 1130 + 10],
+#      [1320, 1380], [1570, 1650], [1840, 1940]]) + 10
+# fiber4 = np.array(
+#     [[30, 120], [220, 300], [420, 490], [640 - 5, 690 + 5], [865 - 20, 890 + 20], [1090 - 10, 1130 + 10],
+#      [1320, 1380], [1570, 1650], [1840, 1940]]) - 10
+# fibers = {0: fiber1, 1: fiber2, 2: fiber3, 3: fiber4}
 if __name__ == "__main__":
     try:
         import mkl
@@ -154,14 +230,48 @@ if __name__ == "__main__":
     # mydir,usershift = os.path.join(mykpicdir,"20200928_HD_154301"),-28
     # mydir,usershift = os.path.join(mykpicdir,"20200928_HIP_95771"),-28
     # mydir,usershift = os.path.join(mykpicdir,"20200928_zet_Aql"),-28
-    # mydir,usershift = os.path.join(mykpicdir,"20200929_lam_Cap"),-28
-    mydir,usershift = os.path.join(mykpicdir,"20201001_HR_8799"),-28
+    # mydir,usershift = os.path.join(mykpicdir,"20200929_lam_Cap"),0#-28
+    # mydir,usershift = os.path.join(mykpicdir,"20201001_HR_8799"),-28
+    mydir,usershift = os.path.join(mykpicdir,"20201026_HIP_6960"),0#-15
+    # mydir,usershift = os.path.join(mykpicdir,"20201026_HIP_6960_im61"),-15
+
+
+    # f = glob(os.path.join(mydir, "calib", "*line_width_smooth.fits"))[0]
+    # hdulist = pyfits.open(f)
+    # arr = hdulist[0].data
+    # print(arr.shape)
+    # plt.plot(arr[1,6,:],label="last time")
+    #
+    # mydir,usershift = os.path.join(mykpicdir,"20201026_HIP_6960"),-15
+    # f = glob(os.path.join(mydir, "calib", "*line_width_smooth.fits"))[0]
+    # hdulist = pyfits.open(f)
+    # arr = hdulist[0].data
+    # print(arr.shape)
+    # plt.plot(arr[1,6,:],label="today")
+    #
+    #
+    # mydir,usershift = os.path.join(mykpicdir,"20201026_HIP_6960_im61"),-15
+    # f = glob(os.path.join(mydir, "calib", "*line_width_smooth.fits"))[0]
+    # hdulist = pyfits.open(f)
+    # arr = hdulist[0].data
+    # print(arr.shape)
+    # plt.plot(arr[1,6,:],label="im61")
+    #
+    #
+    # plt.xlabel("x-pix")
+    # plt.ylabel("sigma LSF width")
+    # plt.legend()
+    # plt.show()
+    # exit()
 
 
 
     mydate = os.path.basename(mydir).split("_")[0]
+    filelist = glob(os.path.join(mydir, "raw", "*.fits"))
+    filelist.sort()
 
-    if 1:
+
+    if 0:
         #background
         background_med_filename = glob(os.path.join(mydir,"calib","*background*.fits"))[0]
         hdulist = pyfits.open(background_med_filename)
@@ -176,10 +286,19 @@ if __name__ == "__main__":
         persisbadpixmap_header = hdulist[0].header
         ny,nx = persisbadpixmap.shape
 
-        filelist = glob(os.path.join(mydir, "raw", "*.fits"))
-        filelist.sort()
 
+    if 1:
+        im_list = []
+        for filename in filelist:
+            print(filename)
+            hdulist = pyfits.open(filename)
+            im = hdulist[0].data.T[:,::-1]#*persisbadpixmap-background
+            im_list.append(im)
 
+        fibers = fibers_guess(im_list, N_order=9)
+        print(fibers)
+
+    if 1:
         im_list = []
         badpixmap_list = []
         fiber_list = []
@@ -189,14 +308,17 @@ if __name__ == "__main__":
             print(filename)
             hdulist = pyfits.open(filename)
             im = hdulist[0].data.T[:,::-1]
+            ny,nx = im.shape
             header = hdulist[0].header
             header_list.append(header)
-            if tint != float(header["TRUITIME"]) or coadds != int(header["COADDS"]):
-                raise Exception("bad tint {0} or coadds {1}, should be {2} and {3}: ".format(float(header["TRUITIME"]),int(header["COADDS"]),tint,coadds) + filename)
+            # if tint != float(header["TRUITIME"]) or coadds != int(header["COADDS"]):
+            #     raise Exception("bad tint {0} or coadds {1}, should be {2} and {3}: ".format(float(header["TRUITIME"]),int(header["COADDS"]),tint,coadds) + filename)
             hdulist.close()
 
-            im_skysub = im-background
-            badpixmap = persisbadpixmap#*get_badpixmap_from_laplacian(im_skysub,bad_pixel_fraction=1e-2)
+            # im_skysub = im-background
+            # badpixmap = persisbadpixmap#*get_badpixmap_from_laplacian(im_skysub,bad_pixel_fraction=1e-2)
+            im_skysub = im
+            badpixmap = np.ones(im.shape)#*get_badpixmap_from_laplacian(im_skysub,bad_pixel_fraction=1e-2)
 
             # plt.imshow((im_skysub*badpixmap),interpolation="nearest",origin="lower")#[1550:1750,0:100]
             # plt.clim([0,50])
@@ -204,12 +326,12 @@ if __name__ == "__main__":
 
             im_list.append(im_skysub)
             badpixmap_list.append(badpixmap)
-            fiber_list.append(guess_star_fiber(im_skysub*badpixmap,usershift=usershift,fiber1=fiber1,fiber2=fiber2,fiber3=fiber3,fiber4=fiber4))
+            fiber_list.append(guess_star_fiber(im_skysub*badpixmap,usershift=usershift,fiber1=fibers[0],fiber2=fibers[1],fiber3=fibers[2],fiber4=fibers[3]))
         cube = np.array(im_list)
         badpixcube = np.array(badpixmap_list)
         fiber_list = np.array(fiber_list)
         print(fiber_list)
-    # exit()
+    exit()
 
     if 1:
         ##calculate traces, FWHM, stellar spec for each fibers

@@ -29,24 +29,24 @@ def guess_star_fiber(image,usershift=0,fiber1=None,fiber2=None,fiber3=None,fiber
 
     fiber1_template = np.zeros(2048)
     for x1,x2 in _fiber1:
-        fiber1_template[x1+10:x2-10] = 1
+        fiber1_template[x1:x2] = 1
     fiber2_template = np.zeros(2048)
     for x1,x2 in _fiber2:
-        fiber2_template[x1+10:x2-10] = 1
+        fiber2_template[x1:x2] = 1
     fiber3_template = np.zeros(2048)
     for x1,x2 in _fiber3:
-        fiber3_template[x1+10:x2-10] = 1
+        fiber3_template[x1:x2] = 1
     fiber4_template = np.zeros(2048)
     for x1,x2 in _fiber4:
-        fiber4_template[x1+10:x2-10] = 1
+        fiber4_template[x1:x2] = 1
     flattened = np.nanmean(image,axis=1)
 
     # import matplotlib.pyplot as plt
     # plt.plot(flattened/np.nanmax(flattened),label="flat")
-    # # plt.plot(fiber1_template,label="0")
-    # plt.plot(fiber2_template,label="1")
-    # # plt.plot(fiber3_template,label="2")
-    # # plt.plot(fiber4_template,label="3")
+    # plt.plot(fiber1_template*0.7,label="0")
+    # plt.plot(fiber2_template*0.8,label="1")
+    # plt.plot(fiber3_template*0.9,label="2")
+    # plt.plot(fiber4_template,label="3")
     # plt.show()
 
     return np.argmax([np.nansum(fiber1_template * flattened),
