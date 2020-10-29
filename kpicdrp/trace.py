@@ -184,7 +184,7 @@ def fibers_guess(im_list,N_order=9):
             # plt.plot(x[left:right],flattened[left:right])
         fibers_unsorted[k] = fiber_guess
     # plt.show()
-    sorted_fib = np.argsort([np.nanmean(myvals) for myvals in fibers_unsorted.values()])
+    sorted_fib = np.argsort([np.nanmean(myvals) for myvals in fibers_unsorted.values()])[::-1]
 
     fibers = {}
     for k,argfib in enumerate(sorted_fib):
@@ -262,8 +262,8 @@ def smooth(trace_calib):
     smooth_trace_calib = np.zeros(trace_calib.shape)+np.nan
     # paras0 = [A, w, y0, B, rn] or [A, w, y0, B, rn, g]?
     x = np.arange(0, trace_calib.shape[2])
-    for fiber_num in np.arange(0,3):
-        for order_id in range(9):
+    for fiber_num in np.arange(trace_calib.shape[0]):
+        for order_id in range(trace_calib.shape[1]):
             for para_id in range(5):
                 print("fiber_num",fiber_num,"order_id",order_id, "para_id", para_id)
                 vec = trace_calib[fiber_num,order_id, :, para_id]
@@ -286,7 +286,7 @@ def guess_star_fiber(image,fibers):
     for f_num in fiber_nums: # in order...?
         fiber_template = np.zeros(2048)
         for x1,x2 in fibers[f_num]:
-            fiber_template[x1+10:x2-10] = 1
+            fiber_template[x1:x2] = 1
         fiber_templates.append(fiber_template)
     flattened = np.nanmean(image,axis=1)
 
@@ -520,43 +520,62 @@ def fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order=9,numthreads=30,fi
 
         for order_id,(y1,y2) in enumerate(fibers[fiber_num]):
             print('order_id,(y1,y2)',order_id,(y1,y2))
-            yindices = np.arange(y1,y2)
 
+            _y1,_y2 = np.clip(y1-10,0,2047),np.clip(y2+10,0,2047)
+            yindices = np.arange(_y1,_y2)
 
-            chunk_size=10
-            N_chunks = nx//chunk_size
-            indices_chunks = []
-            data_chunks = []
-            badpix_chunks = []
-            for k in range(N_chunks-1):
-                indices_chunks.append(np.arange(k*chunk_size,(k+1)*chunk_size))
-                data_chunks.append(im[y1:y2,k*chunk_size:(k+1)*chunk_size])
-                badpix_chunks.append(badpix[y1:y2,k*chunk_size:(k+1)*chunk_size])
-            indices_chunks.append(np.arange((N_chunks-1)*chunk_size,nx))
-            data_chunks.append(im[y1:y2,(N_chunks-1)*chunk_size:nx])
-            badpix_chunks.append(badpix[y1:y2,(N_chunks-1)*chunk_size:nx])
-            outputs_list = pool.map(_fit_trace, zip(indices_chunks,
-                                                        itertools.repeat(yindices),
-                                                        data_chunks,
-                                                        badpix_chunks,
-                                                        itertools.repeat(fitbackground)))
+            if 0:
+                if order_id != 0 or fiber_num != 3:
+                    continue
+                xindices = np.arange(1500, 2000)
+                out, residuals = _fit_trace((xindices, yindices,
+                                             im[_y1:_y2, xindices[0]:xindices[-1] + 1],
+                                             badpix[_y1:_y2, xindices[0]:xindices[-1] + 1],
+                                             fitbackground))
+                plt.subplot(1, 2, 1)
+                plt.imshow(im[_y1:_y2, xindices[0]:xindices[-1] + 1])
+                plt.subplot(1, 2, 2)
+                plt.imshow(residuals)
+                print(out)
+                plt.colorbar()
+                plt.show()
+                # print(out,residuals)
+                exit()
+            else:
+                chunk_size=10
+                N_chunks = nx//chunk_size
+                indices_chunks = []
+                data_chunks = []
+                badpix_chunks = []
+                for k in range(N_chunks-1):
+                    indices_chunks.append(np.arange(k*chunk_size,(k+1)*chunk_size))
+                    data_chunks.append(im[_y1:_y2,k*chunk_size:(k+1)*chunk_size])
+                    badpix_chunks.append(badpix[_y1:_y2,k*chunk_size:(k+1)*chunk_size])
+                indices_chunks.append(np.arange((N_chunks-1)*chunk_size,nx))
+                data_chunks.append(im[_y1:_y2,(N_chunks-1)*chunk_size:nx])
+                badpix_chunks.append(badpix[_y1:_y2,(N_chunks-1)*chunk_size:nx])
+                outputs_list = pool.map(_fit_trace, zip(indices_chunks,
+                                                            itertools.repeat(yindices),
+                                                            data_chunks,
+                                                            badpix_chunks,
+                                                            itertools.repeat(fitbackground)))
 
-            normalized_psfs_func_list = []
-            chunks_ids = []
-            for xindices,out in zip(indices_chunks,outputs_list):
-                # print(out)
-                trace_calib[fiber_num,order_id,xindices[0]:xindices[-1]+1,:] = out[0]
-                residuals[fiber_num,y1:y2,xindices[0]:xindices[-1]+1] = out[1]
-        print('trace_calib[fiber_num]',trace_calib[fiber_num])
-        print('residuals[fiber_num]',residuals[fiber_num])
+                normalized_psfs_func_list = []
+                chunks_ids = []
+                for xindices,out in zip(indices_chunks,outputs_list):
+                    # print(out)
+                    trace_calib[fiber_num,order_id,xindices[0]:xindices[-1]+1,:] = out[0]
+                    residuals[fiber_num,_y1:_y2,xindices[0]:xindices[-1]+1] = out[1]
+        # print('trace_calib[fiber_num]',trace_calib[fiber_num])
+        # print('residuals[fiber_num]',residuals[fiber_num])
 
         pool.close()
         pool.join()
 
     return trace_calib,residuals
 
-main_dir = "/Users/eeswim/Dropbox/kpic_pipeline/public_kpic_data/" #"../../kpic_analysis/tutorial_data/" # main data dir
-obj_folder = "20200702_HIP_81497"
+# main_dir = "/Users/eeswim/Dropbox/kpic_pipeline/public_kpic_data/" #"../../kpic_analysis/tutorial_data/" # main data dir
+# obj_folder = "20200702_HIP_81497"
 
 def run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True):
     
@@ -594,7 +613,7 @@ def run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True):
     for image in cube-badpixcube:
         fiber_list.append(guess_star_fiber(image,fibers))
 
-    print(fibers,fiber_list,cube,badpixcube,ny,nx,N_order)
+    # print(fibers,fiber_list,cube,badpixcube,ny,nx,N_order)
 
     trace_calib,residuals = fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order,numthreads=30,fitbackground=False)
 
@@ -603,5 +622,5 @@ def run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True):
     save(trace_calib,residuals,polyfit_trace_calib,smooth_trace_calib,calib_dir,mydate,header,plot=False)
 
 
-run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True)
+# run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True)
 
