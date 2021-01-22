@@ -126,7 +126,10 @@ def process_backgrounds(filelist,plot=False,save_loc=None):
         header_list.append(background_header)
     unique_tint = np.unique(tint_list)
     unique_coadds = np.unique(coadds_list)
-    print(unique_tint, unique_coadds)
+
+    tint_outlist = []
+    coadd_outlist = []
+
     background_meds = []
     persistent_badpixs = []
     smoothed_thermal_noises = []
@@ -137,6 +140,10 @@ def process_backgrounds(filelist,plot=False,save_loc=None):
             where_tint = np.where((tint_list==tint)*(coadds_list==coadds))
             if np.size(where_tint[0]) == 0:
                 continue
+
+            tint_outlist.append(tint)
+            coadd_outlist.append(coadds)
+
             logging.info("N files = {0}".format(np.size(where_tint[0])))
             
             background_files = np.array(filelist)[where_tint[0]]
@@ -157,7 +164,7 @@ def process_backgrounds(filelist,plot=False,save_loc=None):
                 save_bkgd_badpix(save_loc,background_med,persistent_badpix,smoothed_thermal_noise,header_list[where_tint[0][0]],readnoisebar=False)
 
 
-    return(background_meds,persistent_badpixs,smoothed_thermal_noises,unique_tint,unique_coadds)
+    return(background_meds,persistent_badpixs,smoothed_thermal_noises,tint_outlist,coadd_outlist)
 
 def save_bkgd_badpix(save_loc,master_bkgd,badpixmap,smoothed_thermal_noise,header,readnoisebar=False):
     tint = float(header["TRUITIME"])
