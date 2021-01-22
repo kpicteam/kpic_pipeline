@@ -1,6 +1,7 @@
 from astropy.io import fits
 import numpy as np
 import scipy.ndimage as ndi
+import warnings
 from astropy.stats import mad_std
 from scipy.interpolate import interp1d
 from scipy.ndimage.filters import convolve
@@ -100,8 +101,11 @@ def make_badpixmap(background_files,plot=False):
     background_cube = np.array(background_cube)
     background_badpix_cube = np.array(background_badpix_cube)
 
-    bkgd_noise = np.nanstd(background_cube, axis=0)
-    master_bkgd = np.nanmean(background_cube, axis=0)
+    # suppress warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        bkgd_noise = np.nanstd(background_cube, axis=0)
+        master_bkgd = np.nanmean(background_cube, axis=0)
 
     badpixmap = np.ones(master_bkgd.shape)
     badpixmap[np.where(np.nansum(background_badpix_cube,axis=0)<np.max([2,0.25*background_cube.shape[0]]))] = np.nan
@@ -215,4 +219,3 @@ def save_bkgd_badpix(save_loc,master_bkgd,badpixmap,smoothed_thermal_noise,heade
 # # For a single tint/number of coadds
 # master_bkgd, smoothed_thermal_noise, badpixmap = backgrounds.make_badpixmap(filelist,plot=False) # does not save automatically
 # save_bkgd_badpix(master_bkgd,badpixmap,smoothed_thermal_noise,header=fits.getheader(filelist[0]),readnoisebar=False)
-
