@@ -105,7 +105,7 @@ def make_badpixmap(background_files,plot=False):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         bkgd_noise = np.nanstd(background_cube, axis=0)
-
+        master_bkgd = np.nanmean(background_cube, axis=0)
 
     badpixmap = np.ones(master_bkgd.shape)
     badpixmap[np.where(np.nansum(background_badpix_cube,axis=0)<np.max([2,0.25*background_cube.shape[0]]))] = np.nan
