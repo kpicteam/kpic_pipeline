@@ -6,6 +6,28 @@ import itertools
 from astropy.coordinates import SkyCoord, EarthLocation
 import astropy.units as u
 import astropy.time as time
+from scipy.interpolate import InterpolatedUnivariateSpline
+
+def get_piecewise_linear_model(x_knots,x_samples):
+    M = np.zeros((np.size(x_samples),(np.size(x_knots))))
+    for chunk in range(np.size(x_knots)-1):
+        if chunk == 0:
+            where_chunk = np.where((x_knots[chunk]<=x_samples)*(x_samples<=x_knots[chunk+1]))
+        else:
+            where_chunk = np.where((x_knots[chunk]<x_samples)*(x_samples<=x_knots[chunk+1]))
+        M[where_chunk[0],chunk] = 1-(x_samples[where_chunk]-x_knots[chunk])/(x_knots[chunk+1]-x_knots[chunk])
+        M[where_chunk[0],1+chunk] = (x_samples[where_chunk]-x_knots[chunk])/(x_knots[chunk+1]-x_knots[chunk])
+    return M
+
+
+def get_spline_model(x_knots,x_samples):
+    M = np.zeros((np.size(x_samples),(np.size(x_knots))))
+    for chunk in range(np.size(x_knots)):
+        tmp_y_vec = np.zeros(np.size(x_knots))
+        tmp_y_vec[chunk] = 1
+        spl = InterpolatedUnivariateSpline(x_knots, tmp_y_vec, k=3, ext=0)
+        M[:,chunk] = spl(x_samples)
+    return M
 
 def combine_stellar_spectra(spectra,errors,weights=None):
     """
