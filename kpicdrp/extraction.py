@@ -11,7 +11,7 @@ from astropy.coordinates import SkyCoord, EarthLocation
 import copy
 
 
-gain = 2.85 # e-/ADU
+gain = 3.03 # e-/ADU
 
 def add_baryrv(header):
     """
