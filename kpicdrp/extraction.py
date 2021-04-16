@@ -58,7 +58,9 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True, scale=True
             sci_hdrs.append(out_hdr)
 
             if detect_cosmics:
-                dat_crmap, corr_dat = astroscrappy.detect_cosmics(dat, inmask=badpixmap)
+                badpixmap4cosmic = np.zeros(badpixmap.shape)
+                badpixmap4cosmic[np.where(np.isnan(badpixmap))] = 1
+                dat_crmap, corr_dat = astroscrappy.detect_cosmics(dat, inmask=badpixmap4cosmic.astype(np.bool))
                 dat[dat_crmap] = np.nan
             dat[np.where(np.isnan(badpixmap))] = np.nan
 
@@ -112,7 +114,8 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     residuals = flux * g(good_coords) - good_slice
     max_res = np.nanmax(np.abs(residuals))
     res_mad = np.nanmedian(np.abs(residuals - np.nanmedian(residuals)))
-    badpixmetric = np.abs(max_res/res_mad)
+    badpixmetric = np.abs(max_res)
+    # badpixmetric = np.abs(max_res/res_mad)
 
     # if flux > 200:
     #     import matplotlib.pylab as plt
@@ -220,8 +223,9 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             peakflux = fluxes[fiber, x]/(np.sqrt(2*np.pi) * sigma)
             g = models.Gaussian1D(amplitude=peakflux, mean=order_locs[fiber, x], stddev=sigma)
             long_slice -= g(ys_long)
-        
-        these_badmetrics = column_maxres/np.nanstd(long_slice)
+
+        # these_badmetrics = column_maxres/np.nanstd(long_slice)#/np.nanmedian(np.abs(long_slice - np.nanmedian(long_slice)))
+        these_badmetrics = column_maxres
         badpixmetrics[:, x] = these_badmetrics
 
     return fluxes, fluxerrs_extraction, fluxerrs_bkgd_only, fluxerrs_emperical, badpixmetrics
