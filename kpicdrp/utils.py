@@ -6,6 +6,16 @@ import itertools
 from astropy.coordinates import SkyCoord, EarthLocation
 import astropy.units as u
 import astropy.time as time
+from scipy.interpolate import InterpolatedUnivariateSpline
+
+def get_spline_model(x_knots,x_samples,spline_degree=3):
+    M = np.zeros((np.size(x_samples),(np.size(x_knots))))
+    for chunk in range(np.size(x_knots)):
+        tmp_y_vec = np.zeros(np.size(x_knots))
+        tmp_y_vec[chunk] = 1
+        spl = InterpolatedUnivariateSpline(x_knots, tmp_y_vec, k=spline_degree, ext=0)
+        M[:,chunk] = spl(x_samples)
+    return M
 
 def combine_stellar_spectra(spectra,errors,weights=None):
     """
