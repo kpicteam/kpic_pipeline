@@ -124,6 +124,10 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         star_cf: cross correlation of the planet template with the star template
     """
 
+
+    norm_model = template_fluxes / np.nanmedian(template_fluxes)
+    norm_star = star_template_fluxes / np.nanmedian(star_template_fluxes)
+
     fluxes = []
     star_fluxes = []
     acf_fluxes = []
@@ -138,6 +142,7 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         all_pl_noshift_template = []
         all_star_template = []
         all_data = []
+        order_ids = []
 
         for i in range(orders_wvs.shape[0]):    
             thiswvs = orders_wvs[i]
@@ -156,27 +161,26 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
             order_copy = order - order_continuum + np.nanmedian(order_continuum)
             order_copy[order_mask] = np.nan
 
-
-            template = np.interp(wvs_starframe, template_wvs, template_fluxes) * resp_template
+            template = np.interp(wvs_starframe, template_wvs, norm_model) * resp_template
             template_mask = np.where(np.isnan(template))
             template[template_mask] = np.nanmedian(template)
             template_continuum = ndi.median_filter(template, 100)
-            template = (template - template_continuum)/np.median(template_continuum) + 1
+            template = (template - template_continuum) + np.median(template_continuum)
             template[template_mask] = np.nan
 
 
-            template_noshift = np.interp(thiswvs, template_wvs, template_fluxes) * resp_template
+            template_noshift = np.interp(thiswvs, template_wvs, norm_model) * resp_template
             template_noshift_mask = np.where(np.isnan(template_noshift))
             template_noshift[template_noshift_mask] = np.nanmedian(template_noshift)
             template_noshift_continuum = ndi.median_filter(template_noshift, 100)
-            template_noshift = (template_noshift - template_noshift_continuum)/np.median(template_noshift_continuum) + 1
+            template_noshift = (template_noshift - template_noshift_continuum) + np.median(template_noshift_continuum)
             template_noshift[template_noshift_mask] = np.nan
 
-            star_template = np.interp(thiswvs, star_wvs, star_template_fluxes)
+            star_template = np.interp(thiswvs, star_wvs, norm_star)
             star_mask = np.where(np.isnan(star_template))
             star_template[star_mask] = np.nanmedian(star_template)
             star_continuum = ndi.median_filter(star_template, 100)
-            star_template = (star_template - star_continuum)/np.median(star_template) + 1
+            star_template = (star_template - star_continuum) + np.median(star_continuum)
             star_template[star_mask] = np.nan
 
             good = np.where((~np.isnan(order_copy)) & (~np.isnan(template)) & (~np.isnan(star_template)) & (~np.isnan(template_noshift)))
@@ -184,8 +188,14 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
             all_pl_template = np.append(all_pl_template, template[good])
             all_star_template = np.append(all_star_template, star_template[good])
             all_pl_noshift_template = np.append(all_pl_noshift_template, template_noshift[good])
-        
-        A_matrix = np.array([all_pl_template, all_star_template]).T
+            order_ids = np.append(order_ids, np.ones(template[good].shape) * i)
+
+        A_matrix = np.zeros([np.size(all_pl_template), orders_wvs.shape[0] + 1])
+        A_matrix[:, 0] = all_pl_template
+        for i in range(orders_wvs.shape[0]): 
+            order_indices = np.where(order_ids == i)
+            A_matrix[order_indices[0], i+1] = all_star_template[order_indices]
+
         results = optimize.lsq_linear(A_matrix, all_data)
 
         results_noshift = optimize.lsq_linear(A_matrix, all_pl_noshift_template)
