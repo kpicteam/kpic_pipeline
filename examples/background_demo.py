@@ -9,14 +9,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # For multiple tint and coadds in one folder
-main_dir = "../../kpic_analysis/tutorial_data/" # main data dir
-bkgddir = os.path.join(main_dir,"20200702_backgrounds/") # background frames
+kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
+bkgddir = os.path.join(kpicpublicdir,"20200928_backgrounds/") # background frames
+save_loc =os.path.join(bkgddir,"calib","20200928")
+# Create output directory if it does not exist.
+if not os.path.exists(os.path.join(bkgddir,"calib")):
+    os.makedirs(os.path.join(bkgddir,"calib"))
 filelist = glob(os.path.join(bkgddir,"raw","*.fits"))
 
 # For multiple tint and coadds in one folder
 # It will save the master backgrounds and bap pixel maps to bkgddir.
 master_bkgds,badpixmaps,\
-smoothed_thermal_noises,unique_tint,unique_coadds = background.process_backgrounds(filelist,save_loc=bkgddir)
+smoothed_thermal_noises,unique_tint,unique_coadds = background.process_backgrounds(filelist,save_loc=save_loc)
 
 # Plot the resulting master backgrounds and bad pixels
 plt.figure(1)
