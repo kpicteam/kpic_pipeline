@@ -162,7 +162,7 @@ def fibers_guess(im_list,N_order=9):
         background_cutoff = np.percentile(im[np.where(np.isfinite(im))],97)
         im[np.where(im<background_cutoff)] = 0
         flattened = np.nanmean(im,axis=1)
-        peaks = find_peaks(flattened,distance=120)[0]#,width=[2,None],plateau_size=None
+        peaks = find_peaks(flattened,distance=120,width=[2,None])[0]#,width=[2,None],plateau_size=None
         peaks_val = np.array([flattened[peak] for peak in peaks])
         peaks = peaks[np.argsort(peaks_val)[::-1][0:N_order]]
         peaks = np.sort(peaks)
@@ -624,3 +624,43 @@ def run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True):
 
 # run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True)
 
+
+def get_background_traces(trace_loc):
+    """
+    Returns fictitious trace location sampling the slit background and detector background (i.e., out of slit "dark")
+
+    Args:
+        trace_loc: list of size N_fibers of trace centers arrays with size (N_orders, Nx)
+    """
+    trace_loc_cp = copy(trace_loc)
+    trace_loc_cp[np.where(trace_loc_cp == 0)] = np.nan
+
+    trace_loc_slit = np.zeros((trace_loc_cp.shape[0], trace_loc_cp.shape[1], trace_loc_cp.shape[2]))
+    trace_loc_dark = np.zeros((trace_loc_cp.shape[0], trace_loc_cp.shape[1], trace_loc_cp.shape[2]))
+
+    # print(trace_loc_cp.shape)
+    # plt.figure(1)
+    # for order_id in range(9):
+    #     plt.subplot(9, 1, 9-order_id)
+    #     plt.plot(trace_loc_cp[1,order_id,:],linestyle="-",linewidth=2)
+    #     plt.legend()
+    # plt.show()
+
+    for order_id in range(trace_loc_cp.shape[1]):
+        dy1 = np.nanmean(trace_loc_cp[0, order_id, :] - trace_loc_cp[1, order_id, :]) / 2
+        dy2 = np.nanmean(trace_loc_cp[0, order_id, :] - trace_loc_cp[-1, order_id, :])
+        # exit()
+        if np.isnan(dy1):
+            dy1 = 10
+        if np.isnan(dy2):
+            dy2 = 40
+        for fib_id in range(trace_loc_cp.shape[0]):
+
+            trace_loc_slit[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] - dy1
+
+            if order_id == 0:
+                trace_loc_dark[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] + 1.5 * dy2 - fib_id * dy1
+            else:
+                trace_loc_dark[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] - 3 * dy2 + (3 + fib_id) * dy1
+
+    return trace_loc_slit, trace_loc_dark
