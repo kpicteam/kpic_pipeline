@@ -7,6 +7,9 @@ from astropy.coordinates import SkyCoord, EarthLocation
 import astropy.units as u
 import astropy.time as time
 from scipy.interpolate import InterpolatedUnivariateSpline
+import astropy.io.fits as pyfits
+import os
+from glob import glob
 
 def get_spline_model(x_knots,x_samples,spline_degree=3):
     M = np.zeros((np.size(x_samples),(np.size(x_knots))))
@@ -207,3 +210,54 @@ def compute_rel_vel(mjd, ra, dec, star_v):
     rel_v = -barycorr.to(u.km/u.s).value + star_v # postiive is redshfit? 
     
     return rel_v
+
+
+def plot_kpic_spectrum(arr,wvs=None,arr_err=None,ax_list=None,linestyle="-",linewidth=2,color=None,label=None):
+    import matplotlib.pyplot as plt
+    if ax_list is None:
+        _ax_list = []
+
+    if wvs is None:
+        wvs = np.tile(np.arange(arr.shape[1])[None,:],(arr.shape[0],1))
+
+    for order_id in range(arr.shape[0]):
+        if ax_list is None:
+            plt.subplot(arr.shape[0], 1, arr.shape[0]-order_id)
+            _ax_list.append(plt.gca())
+        else:
+            plt.sca(ax_list[order_id])
+        plt.plot(wvs[order_id,:],arr[order_id,:],linestyle=linestyle,linewidth=linewidth,label=label,color=color)
+        if arr_err is not None:
+            plt.fill_between(wvs[order_id,:],
+                             arr[order_id,:] - arr_err[order_id,:],
+                             arr[order_id,:] + arr_err[order_id,:],
+                             label=label+" (err)", alpha=0.5,color=color)
+
+    if ax_list is None:
+        return _ax_list
+    else:
+        return ax_list
+
+def get_calib_bkg(filename,mybkgdir):
+    hdulist = pyfits.open(filename)
+    # dat = np.copy(hdulist[0].data)
+    # dat = np.rot90(hdulist[0].data, -1)
+    header = hdulist[0].header
+
+    tint = float(header["TRUITIME"])
+    coadds = int(header["COADDS"])
+
+    # read the master Background file
+    background_med_filename = glob(os.path.join(mybkgdir, "*background_med_nobars_tint{0}_coadds{1}.fits".format(tint, coadds)))[0]
+    print(background_med_filename)
+    _hdulist = pyfits.open(background_med_filename)
+    bkgd = _hdulist[0].data
+    bkgd_noise = _hdulist[1].data
+
+    # read the bad pixel map
+    persisbadpixmap_filename = glob(os.path.join(mybkgdir, "*persistent_badpix_nobars_tint{0}_coadds{1}.fits".format(tint, coadds)))[0]
+    print(persisbadpixmap_filename)
+    _hdulist = pyfits.open(persisbadpixmap_filename)
+    badpixmap = _hdulist[0].data
+
+    return bkgd,bkgd_noise,badpixmap
