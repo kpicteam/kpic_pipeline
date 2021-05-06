@@ -55,6 +55,8 @@ def _fit_trace(paras):
             y0 = yindices[np.nanargmax(datacol)]
             B = 0
             rn = np.nanstd(datacol)
+            if np.abs(rn<1e-14): ### Added by LF 04 May 21 to avoid returning nonsense values
+                skip=True
             # g=0
             if fitbackground:
                 paras0 = [A, w, y0, rn, B]
@@ -80,6 +82,9 @@ def _fit_trace(paras):
                 out[k,:] = [res.x[0],res.x[1],res.x[2],0,res.x[3]]
                 residuals[:,k] = (datacol - profile_model([res.x[0],res.x[1],res.x[2],0],yindices))/res.x[3]
 
+            # plt.plot(yindices,datacol)
+            # plt.plot(yindices,profile_model([res.x[0],res.x[1],res.x[2],0],yindices))
+            # plt.show()
             # print(res.x[2]<yindices[0] or yindices[-1]<res.x[2])
             # print(res.x[2],yindices[0] , yindices[-1],res.x[2])
             if np.abs(res.x[2]- y0) > 3:
@@ -235,7 +240,7 @@ def trace(vec,x):
     # plt.show()
 
     # x_knots = np.concatenate([[0],np.arange(400, 1701, 100).astype(np.int),[trace_calib.shape[2]-1]])  # np.array([wvs_stamp[wvid] for wvid in )
-    x_knots = np.linspace(0, 2047, 10,endpoint=True).astype(np.int)  # np.array([wvs_stamp[wvid] for wvid in )
+    x_knots = np.linspace(0, len(x)-1, 10,endpoint=True).astype(np.int)  # Changed by LF 05 May 21 to deal with different array sizes
     paras0 = np.array(vec_polyfit[x_knots].tolist())
     simplex_init_steps = np.ones(np.size(paras0))*vec_hpf_std*100
     initial_simplex = np.concatenate([paras0[None, :], paras0[None, :] + np.diag(simplex_init_steps)],axis=0)

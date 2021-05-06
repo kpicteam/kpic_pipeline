@@ -126,8 +126,37 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     
     return flux, flux_err, flux_err_bkgd_only, max_res
 
+def extract_1d_box(dat_coords, dat_slice, center, sigma, noise):
+    """
+    Box extraction of a single 1-D slice
 
-def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background, trace_flag):
+    Args:
+        dat_coords: y-coordinates of dat_slice (Ny)
+        dat_slice: data along a slice (Ny)
+        center: center of Gaussian in dat_coords coordinates (float)
+        sigma: standard deviation of Gaussian (float)
+        noise: noise in each pixel of data (Ny)
+
+    Returns:
+        flux: total integrated flux in the box
+        badpixmetric metric for how good of a flux estimate this is (float)
+    """
+    g = models.Gaussian1D(amplitude=1./np.sqrt(2*np.pi*sigma**2), mean=center, stddev=sigma)
+    good = np.where(~np.isnan(dat_slice))
+    if np.size(good) < 3:
+        return np.nan, np.nan, np.nan, np.nan
+    good_slice = dat_slice[good]
+    good_coords = dat_coords[good]
+    noise = noise[good]
+    flux = np.sum(good_slice)
+    flux_err = np.sqrt(np.sum(noise**2+good_slice/gain))
+    flux_err_bkgd_only = np.sqrt(np.sum(noise**2))
+    max_res = np.nan ### This isn't meaningful for a box extraction
+
+    return flux, flux_err, flux_err_bkgd_only, max_res
+
+
+def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background, trace_flag, box=False):
     """
     Extracts the flux from a chunk of size Nx of an order for some given fibers
 
@@ -202,7 +231,10 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
                 noise[np.where(np.isnan(noise))] = bkgd_noise
 
                 #flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
-                flux, flux_err_extraction, flux_err_bkgd_only, maxres = extract_1d(ys, dat_slice, center, sigma, noise)
+                if box: 
+                    flux, flux_err_extraction, flux_err_bkgd_only, maxres = extract_1d_box(ys, dat_slice, center, sigma, noise)
+                else:
+                    flux, flux_err_extraction, flux_err_bkgd_only, maxres = extract_1d(ys, dat_slice, center, sigma, noise)
 
             column_maxres.append(maxres)
             fluxes[fiber, x] = flux
@@ -233,7 +265,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         
 
 
-def extract_flux(image, trace_locs, trace_widths, output_filename=None,img_noise=None, img_hdr=None, fit_background=False, trace_flags=None, bad_pixel_fraction=0.0, pool=None):
+def extract_flux(image, trace_locs, trace_widths, output_filename=None,img_noise=None, img_hdr=None, fit_background=False, trace_flags=None, bad_pixel_fraction=0.0, pool=None, box=False):
     """
     Extracts the flux from the traces to make 1-D spectra. 
 
@@ -303,14 +335,14 @@ def extract_flux(image, trace_locs, trace_widths, output_filename=None,img_noise
 
             if pool is None:
                 # extract flux from chunk
-                outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, trace_flags)
+                outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, trace_flags, box=box)
                 fluxes[:, order, c_start:c_end] = outputs[0]
                 errors_extraction[:, order, c_start:c_end] = outputs[1]
                 errors_bkgd_only[:, order, c_start:c_end] = outputs[2]
                 errors_emperical[:, order, c_start:c_end] = outputs[3]
                 badpixmetric[:, order, c_start:c_end] = outputs[-1]
             else:
-                output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, trace_flags))
+                output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, trace_flags), dict(box=box))
                 pool_jobs.append((output, order, c_start, c_end))
 
     # for multiprocessing, need to retrieve outputs outputs
