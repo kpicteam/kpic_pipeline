@@ -40,10 +40,8 @@ def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True, scale=True
         add_baryrv: If True, add barycentric RV to the header
 
     Returns:
-        mean_sci_data: 2-D mean image of all the input science files
-        sci_hdrs: headers of input science files
-        sci_noise: 2-D stddev map of all the input science files
         sci_frames: array of all the 2-D images. Shape of (N_frames, y, x)
+        sci_hdrs: headers of input science files
     """
 
     # list containing 1 or more frames
