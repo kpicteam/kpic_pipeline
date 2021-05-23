@@ -50,6 +50,7 @@ plt.show()
 # OR
 
 # For a single tint/number of coadds
-# master_bkgd, smoothed_thermal_noise, badpixmap = background.create_background_badpixelmap(filelist,plot=True) # does not save automatically
-# background.save_bkgd_badpix(bkgddir,master_bkgd,badpixmap,smoothed_thermal_noise,header=fits.getheader(filelist[0]),
-#                             readnoisebar=False)
+# raw_dataset = Dataset(filelist=filelist, dtype=DetectorFrame)
+# master_bkgd, badpixmap = background.create_background_badpixelmap(raw_dataset, fileprefix=bkgd_fileprefix) # does not save automatically
+# master_bkgd.save(filedir=bkgddir)
+# badpixmap.save(filedir=bkgddir)
