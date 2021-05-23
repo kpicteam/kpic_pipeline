@@ -131,6 +131,9 @@ class Dataset():
             # return a subset of the dataset
             return Dataset(data_sequence=self.data[indices])
 
+    def __len__(self):
+        return len(self.data)
+
     def save(self, filedir=None, filenames=None):
         """
         Save each file of data in this dataset into the indicated file directory

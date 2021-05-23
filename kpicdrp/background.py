@@ -1,11 +1,12 @@
 import os
-from astropy.io import fits
+import warnings
 import numpy as np
 import scipy.ndimage as ndi
-import warnings
-from astropy.stats import mad_std
 from scipy.interpolate import interp1d
 from scipy.ndimage.filters import convolve
+from astropy.io import fits
+import astropy.time as time
+from astropy.stats import mad_std
 
 import kpicdrp.data as data
 
@@ -139,6 +140,16 @@ def create_background_badpixelmap(background_frames, fileprefix=None, plot=False
 
     master_bkgd = data.Background(data=master_bkgd, header=bkgd_header, filepath=bkgd_filepath, data_noise=smoothed_thermal_noise)
     badpixmap = data.BadPixelMap(data=badpixmap, header=bkgd_header, filepath=bpmap_filepath)
+
+    # add history of data reduction
+    tnow = time.Time.now()
+    master_bkgd.header['HISTORY'] = "[{0}] Combined into background file".format(str(tnow))
+    badpixmap.header['HISTORY'] = "[{0}] Combined into bad pixel file".format(str(tnow))
+    # write to header all the files that were used in making this file
+    for calib_frame in [master_bkgd, badpixmap]:
+        calib_frame.header['DRPNFILE'] = len(background_frames)
+        for i in range(len(background_frames)):
+            calib_frame.header['FILE_{0}'.format(i)] = background_frames[0].filename
 
     return master_bkgd, badpixmap
 
