@@ -5,6 +5,7 @@ import os
 from multiprocessing import Value
 import numpy as np
 import astropy.io.fits as fits
+import astropy.time as time
 
 
 class BasicData():
@@ -24,6 +25,7 @@ class BasicData():
         header: corresponding header
         filename (str): filepath that corresponds to the data (where it is read/written)
         type (str): kind of data in string representation
+        time_obs (astropy.time): time that data was taken
         filesuffix (str): 
     """
     type = "base"
@@ -55,6 +57,11 @@ class BasicData():
         else:
             self.filename = filepath_args[-1]
             self.filedir = os.path.sep.join(filepath_args[:-1])
+
+        # get time
+        date = self.header['DATE-OBS']
+        utc = self.header['UTC']
+        self.time_obs = time.Time("{0}T{1}Z".format(date, utc))
 
 
     def save(self, filename=None, filedir=None):
