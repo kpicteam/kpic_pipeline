@@ -3,6 +3,7 @@ Define datatypes for the KPIC DRP
 """
 import os
 from multiprocessing import Value
+from astropy.utils import data
 import numpy as np
 import astropy.io.fits as fits
 import astropy.time as time
@@ -248,3 +249,54 @@ class BadPixelMap(DetectorFrame):
             raise ValueError("input frame needs to be instance of DetectorFrame")
         
         frame.data *= self.data # either multiplies by 1 or np.nan
+
+class TraceParams(BasicData):
+    """
+    Location and widths of fiber traces on the NIRSPEC detector
+    """
+    type = "trace"
+
+    def __init__(self, locs=None, widths=None, labels=None, header=None, filepath=""):
+        if locs is None and widths is None and labels is None and header is None:
+            super().__init__(filepath=filepath) # read in file from disk
+            self.locs = self.data
+            self.widths = self.exthdus[0].data
+            self.labels = self.exthdus[1].data
+        else:
+            if locs is None or widths is None or labels is None or header is None:
+                raise ValueError("locs, widths, labels, and header all need to be set as not None in to create a TraceParams")
+            
+            # not reading in from disk. user has passed in all the necessary components to make a new TraceParams
+            super().__init__(locs, header, filepath) # just pass in locs as the "data"
+        
+            self.locs = locs
+            self.widths = widths
+            self.labels = labels
+
+
+    def save(self, filename=None, filedir=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        self.header['ISCALIB'] = True
+        self.header['CALIBTYP'] = "TraceParams"
+
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+        
+        filepath = os.path.join(self.filedir, self.filename)
+
+        hdulist = fits.HDUList()
+        hdu = fits.PrimaryHDU(data=self.locs, header=self.header)
+        hdulist.append(hdu)
+        exthdu1 = fits.ImageHDU(data=self.widths)
+        hdulist.append(exthdu1)
+        exthdu2 = fits.ImageHDU(data=self.labels)
+        hdulist.append(exthdu1)
+        hdulist.writeto(filepath, overwrite=True)
+        hdulist.close()
