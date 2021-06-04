@@ -100,7 +100,7 @@ for frame in cleaned_data:
     fiber_list.append(trace.guess_star_fiber(frame.data, guess_fibers_params))
 
 # Calibrate the trace position and width
-trace_calib,residuals = trace.fit_trace(cleaned_data, guess_fibers_params, fiber_list, numthreads=numthreads, fitbackground=False)
+trace_calib = trace.fit_trace(cleaned_data, guess_fibers_params, fiber_list, numthreads=numthreads, fitbackground=False)
 # The dimensions of trace calib are (4 fibers, 9 orders, 2048 pixels, 5) #[A, w, y0, rn, B]
 # trace_calib[:,:,:,0]: amplitude of the 1D gaussian
 # trace_calib[:,:,:,1]: trace width (1D gaussian sigma)
