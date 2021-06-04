@@ -9,6 +9,7 @@ from astropy.time import Time
 import astropy.units as u
 from astropy.coordinates import SkyCoord, EarthLocation
 import copy
+import kpicdrp.data as data
 
 
 gain = 3.03 # e-/ADU
@@ -27,56 +28,53 @@ def add_baryrv(header):
 
     return out_header
 
-def process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True, scale=True,add_baryrv=True):
+def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, scale=True, add_baryrv=True):
     """
     Does simple processing to the raw spectroscopic data: bkgd subtraction, bad pixels, cosmic rays
 
     Args:
-        filelist: list of science files to process
-        bkgd: 2-D bkgd frame for subtraction
-        badpixmap: 2-D bad pixel map
-        detect_cosmics: boolean, if True, runs a cosmic ray rejection algorithm on each image
-        scale: if True, scales the background to try to match the science frame.
-        add_baryrv: If True, add barycentric RV to the header
+        raw_frames (data.Dataset): dataset of raw detector frames to process
+        bkgd (data.Background): 2-D bkgd frame for subtraction
+        badpixmap (data.BadPixelMap): 2-D bad pixel map
+        detect_cosmics (bool): if True, runs a cosmic ray rejection algorithm on each image
+        scale (bool): if True, scales the background to try to match the science frame.
+        add_baryrv (bool): If True, add barycentric RV to the header
 
     Returns:
-        sci_frames: array of all the 2-D images. Shape of (N_frames, y, x)
-        sci_hdrs: headers of input science files
+        processed_dataset (data.Dataset): a new dataset with basic 2D data processing performed 
     """
-
-    # list containing 1 or more frames
-    sci_frames = []
-    sci_hdrs = []
+    processed_data = []
     # iterate over images from the same fiber
-    for filename in filelist:
-        with fits.open(filename) as hdulist:
-            dat = np.copy(hdulist[0].data)
-            dat = np.rot90(dat, -1)
-            # copy hdr of frame, plus new keyword for BARYRV
-            out_hdr = hdulist[0].header
-            if add_baryrv:
-                out_hdr = add_baryrv(out_hdr)
-            sci_hdrs.append(out_hdr)
+    for frame in raw_frames:
+        new_hdr = frame.header.copy()
+        new_data = np.copy(frame.data)
+            
+        if add_baryrv:
+            new_hdr = add_baryrv(new_hdr)
 
-            if detect_cosmics:
-                badpixmap4cosmic = np.zeros(badpixmap.shape)
-                badpixmap4cosmic[np.where(np.isnan(badpixmap))] = 1
-                dat_crmap, corr_dat = astroscrappy.detect_cosmics(dat, inmask=badpixmap4cosmic.astype(np.bool))
-                dat[dat_crmap] = np.nan
-            dat[np.where(np.isnan(badpixmap))] = np.nan
+        if detect_cosmics:
+            badpixmap4cosmic = np.zeros(badpixmap.data.shape)
+            badpixmap4cosmic[np.where(np.isnan(badpixmap.data))] = 1
+            dat_crmap, corr_dat = astroscrappy.detect_cosmics(new_data, inmask=badpixmap4cosmic.astype(np.bool))
+            new_data[dat_crmap] = np.nan
+        new_data[np.where(np.isnan(badpixmap.data))] = np.nan
 
-            # subtract background
-            if scale:
-                scale_factor = (np.nanmedian(dat)/np.nanmedian(bkgd))
-            else:
-                scale_factor = 1
+        # subtract background
+        if scale:
+            scale_factor = (np.nanmedian(new_data)/np.nanmedian(bkgd.data))
+        else:
+            scale_factor = 1
 
-            dat -= bkgd * scale_factor
+        new_data -= bkgd.data * scale_factor
 
-            sci_frames.append(dat)
-        hdulist.close()
+        new_frame = data.DetectorFrame(data=new_data, header=new_hdr, filepath=frame.filepath)
+        new_frame.filename = new_frame.filename[:-5] + "_bkgdsub.fits"
 
-    return sci_frames,sci_hdrs
+        processed_data.append(new_frame)
+
+    processed_dataset = data.Dataset(processed_data)
+
+    return processed_dataset
 
 
 def extract_1d(dat_coords, dat_slice, center, sigma, noise):
@@ -496,116 +494,6 @@ def gauss_cost(params, xs, dat, bkgd):
 
     return model - dat
 
-
-def fit_trace(frame, guess_ends, xs=None, plot=False):
-    """
-    Fit the trace for a fiber using a polynomial for each order
-
-    Args:
-        frame: 2-D frame (unrotated))
-        guess_ends: a N_orderx2 array, where for each order is a pair of numbers for the endpoints of that order
-                    The endpoints are the x coordinate in the unrotated frame, starting with the x coordinate
-                    corresponding to the top edge of the trace
-        xs: (optiona) the x coordinates in the rotated frame to fit to
-        plot: (optiona) plot the extracted flux to sanity check the fit. 
-    """
-    orders_fluxes = []
-    orders_sigmas = []
-    orders_sigmas_fit = []
-    orders_cuts = []
-    orders_centers = []
-    orders_center_fit = []
-
-    frame_rot = frame #np.rot90(frame, -1)
-
-    if xs is None:
-        xmin = 0
-        xmax = frame_rot.shape[1]
-        xs = np.arange(xmin, xmax, 1)
-
-    ends = guess_ends
-
-    for end in ends:
-        order_fluxes = []
-        order_sigmas = []
-        order_centers = []
-        order_cuts = []
-        
-        slope = (end[1]-end[0])/frame_rot.shape[1]
-        
-        y_vals = []
-        for x in xs:
-            ycen = end[0] + slope*x + 11
-            ymin = int(np.round(ycen - 15))
-            ymax = int(np.round(ycen + 15))
-            
-            dat_slice = frame_rot[ymin:ymax+1,x]
-            maxind = np.nanargmax(dat_slice) + ymin
-            y_vals.append(maxind)
-            
-        fit = np.polyfit(xs, y_vals, 1)
-        fittrace = np.poly1d(fit)
-        
-        for x in xs:
-            maxind = int(np.round(fittrace(x)))
-            
-            dat_slice = frame_rot[maxind-15:maxind+15+1,x]
-            bkgd = np.median([frame_rot[maxind-25:maxind-15+1,x], frame_rot[maxind+15:maxind+25+1,x]])
-            
-            ys = np.arange(maxind-15, maxind+15+1, dtype=float)
-
-            good = np.where(~np.isnan(dat_slice))
-            result = scipy.optimize.leastsq(gauss_cost, (1000, 0.7, maxind), args=(ys[good], dat_slice[good], bkgd))
-                                        
-            order_fluxes.append(result[0][0] * np.sqrt(2*np.pi) * result[0][1])
-            order_sigmas.append(result[0][1])
-            order_centers.append(result[0][2])
-            order_cuts.append(np.interp(np.arange(-5,6,1) + result[0][2], ys, dat_slice))
-            
-        order_fluxes = np.array(order_fluxes)
-        flux_smooth = ndi.median_filter(order_fluxes, 300)    
-        bad = np.where(np.abs(order_fluxes - flux_smooth) > 2 * flux_smooth )
-        flux_smooth2 = ndi.median_filter(order_fluxes, 3)    
-        order_fluxes[bad] = flux_smooth2[bad]
-            
-        order_sigma = np.median(order_sigmas)
-        sigma_fitargs = np.polyfit(xs, ndi.median_filter(order_sigmas, 15), 1)
-        center_fitargs = np.polyfit(xs, ndi.median_filter(order_centers, 15), 3)
-
-        center_fit = np.poly1d(center_fitargs)
-        order_centers = center_fit(xs)
-
-        order_sigmas = np.poly1d(sigma_fitargs)(xs)
-        
-        orders_fluxes.append(order_fluxes)
-        orders_sigmas.append(order_sigmas)
-        orders_sigmas_fit.append(sigma_fitargs)
-        orders_cuts.append(order_cuts)
-        orders_centers.append(order_centers)
-        orders_center_fit.append(center_fitargs)
-
-    #spectral_responses = measure_spectral_response(orders_fluxes)
-
-    if plot:
-        import matplotlib.pylab as plt
-        fig = plt.figure(figsize=(12,16))
-        i = 0
-        for order in orders_fluxes:
-            ax = fig.add_subplot(9, 1, i+1)
-            ax.plot(xs, order,3, 'b-')
-            ax.set_ylim([0, np.nanpercentile(order, 99) * 1.2])
-            i += 1
-
-        plt.figure(figsize=(16,16))
-        plt.imshow(frame_rot, cmap="viridis", interpolation="nearest", vmin=0, vmax=np.nanpercentile(frame_rot, 90))
-        plt.gca().invert_yaxis()
-
-        for order_centers in orders_centers:
-            plt.plot(xs, order_centers, 'r-' )
-
-        plt.show()
-
-    return orders_centers, orders_sigmas#, spectral_responses
 
 
 def measure_spectral_response(orders_wvs, orders_fluxes, model_wvs, model_fluxes, filter_size=500):
