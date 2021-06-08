@@ -35,17 +35,17 @@ class BasicData():
         if data is not None:
             self.data = data
             self.header = header
-            self.exthdus = None
+            self.extdata = None
         elif len(filepath) > 0:
             # load data/header from disk. assume loaded in primary FITS extention
             with fits.open(filepath) as hdulist:
-                self.data = hdulist[0].data
-                self.header = hdulist[0].header
+                self.data = np.copy(hdulist[0].data)
+                self.header = hdulist[0].header.copy()
                 # load the extension headers for subclasses to deal with 
                 if len(hdulist) > 1:
-                    self.exthdus = hdulist[1:]
+                    self.extdata = [np.copy(hdu.data) for hdu in hdulist[1:]]
                 else:
-                    self.exthdus = None
+                    self.extdata = None
         else:
             raise ValueError("Either data or filename needs to be specified. Cannot both be empty")
         
@@ -184,8 +184,8 @@ class Background(DetectorFrame):
 
         if data_noise is not None:
             self.noise = data_noise
-        elif self.exthdus is not None:
-            self.noise = self.exthdus[0].data
+        elif self.extdata is not None:
+            self.noise = self.extdata[0]
         else: 
             self.noise = np.zeros(self.data.shape)
 
@@ -260,8 +260,8 @@ class TraceParams(BasicData):
         if locs is None and widths is None and labels is None and header is None:
             super().__init__(filepath=filepath) # read in file from disk
             self.locs = self.data
-            self.widths = self.exthdus[0].data
-            self.labels = self.exthdus[1].data
+            self.widths = self.extdata[0]
+            self.labels = self.extdata[1]
         else:
             if locs is None or widths is None or labels is None or header is None:
                 raise ValueError("locs, widths, labels, and header all need to be set as not None in to create a TraceParams")
