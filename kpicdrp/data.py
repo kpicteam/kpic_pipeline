@@ -130,16 +130,7 @@ class Dataset():
         return this_data
 
     def __iter__(self):
-        self.__count__ = 0
-        return self
-
-    def __next__(self):
-        if self.__count__ < len(self.frames):
-            frame = self.frames[self.__count__]
-            self.__count__ += 1
-            return frame
-        else:
-            raise StopIteration
+        return self.frames.__iter__()
 
     def __getitem__(self, indices):
         if isinstance(indices, int):
