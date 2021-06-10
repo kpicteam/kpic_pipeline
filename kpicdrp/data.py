@@ -64,6 +64,10 @@ class BasicData():
         utc = self.header['UTC']
         self.time_obs = time.Time("{0}T{1}Z".format(date, utc))
 
+    # create this field dynamically 
+    @property
+    def filepath(self):
+        return os.path.join(self.filedir, self.filename)
 
     def save(self, filename=None, filedir=None):
         """
@@ -92,15 +96,15 @@ class Dataset():
     """
     A sequence of data objects of the same kind. Can be looped over. 
     """
-    def __init__(self, data_sequence=None, filelist=None, dtype=None):
-        if data_sequence is None and filelist is None:
+    def __init__(self, frames=None, filelist=None, dtype=None):
+        if frames is None and filelist is None:
             raise ValueError("Either data_sequence or filelist needs to be specified")
 
 
-        if data_sequence is not None:
+        if frames is not None:
             # data is already nicely formatted. No need to do anything
-            self.data = data_sequence
-            self.type = data_sequence[0].type
+            self.frames = frames
+            self.type = frames[0].type
         else:
             if len(filelist) == 0:
                 raise ValueError("Empty filelist passed in")
@@ -108,24 +112,30 @@ class Dataset():
             # read in data from disk
             if dtype is None:
                 raise ValueError("Need to specify a dtype when passing in a list of files")
-            self.data = []
+            self.frames = []
             for filepath in filelist:
                 frame = dtype(filepath=filepath)
-                self.data.append(frame)
+                self.frames.append(frame)
             
-            self.type = self.data[0].type
+            self.type = self.frames[0].type
 
-            # turn lists into np.array for indiexing behavior
-            if isinstance(self.data, list):
-                self.data = np.array(self.data)
+        # turn lists into np.array for indiexing behavior
+        if isinstance(self.frames, list):
+            self.frames = np.array(self.frames)
+
+    # create the data field dynamically 
+    @property
+    def data(self):
+        this_data = np.array([frame.data for frame in self.frames])
+        return this_data
 
     def __iter__(self):
         self.__count__ = 0
         return self
 
     def __next__(self):
-        if self.__count__ < len(self.data):
-            frame = self.data[self.__count__]
+        if self.__count__ < len(self.frames):
+            frame = self.frames[self.__count__]
             self.__count__ += 1
             return frame
         else:
@@ -134,13 +144,13 @@ class Dataset():
     def __getitem__(self, indices):
         if isinstance(indices, int):
             # return a single element of the data
-            return self.data[indices]
+            return self.frames[indices]
         else:
             # return a subset of the dataset
-            return Dataset(data_sequence=self.data[indices])
+            return Dataset(frames=self.frames[indices])
 
     def __len__(self):
-        return len(self.data)
+        return len(self.frames)
 
     def save(self, filedir=None, filenames=None):
         """
@@ -150,11 +160,11 @@ class Dataset():
         # may need to strip off the dir of filenames to save into filedir. 
         if filenames is None:
             filenames = []
-            for frame in self.data:
+            for frame in self.frames:
                 filename = frame.filename
                 filenames.append(frame.filename)
 
-        for filename, frame in zip(filenames, self.data):
+        for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
         
@@ -261,13 +271,17 @@ class TraceParams(BasicData):
             super().__init__(filepath=filepath) # read in file from disk
             self.locs = self.data
             self.widths = self.extdata[0]
-            self.labels = self.extdata[1]
+            
+            self.labels = []
+            num_fibs = self.locs.shape[0]
+            for i in range(num_fibs):
+                self.labels.append(self.header['FIB{0}'.format(i)])
         else:
             if locs is None or widths is None or labels is None or header is None:
                 raise ValueError("locs, widths, labels, and header all need to be set as not None in to create a TraceParams")
             
             # not reading in from disk. user has passed in all the necessary components to make a new TraceParams
-            super().__init__(locs, header, filepath) # just pass in locs as the "data"
+            super().__init__(data=locs, header=header, filepath=filepath) # just pass in locs as the "data"
         
             self.locs = locs
             self.widths = widths
@@ -284,6 +298,10 @@ class TraceParams(BasicData):
         self.header['ISCALIB'] = True
         self.header['CALIBTYP'] = "TraceParams"
 
+        # write labels to header
+        for i, label in enumerate(self.labels):
+            self.header['FIB{0}'.label(i)] = label
+
         if filename is not None:
             self.filename = filename
         if filedir is not None:
@@ -295,8 +313,6 @@ class TraceParams(BasicData):
         hdu = fits.PrimaryHDU(data=self.locs, header=self.header)
         hdulist.append(hdu)
         exthdu1 = fits.ImageHDU(data=self.widths)
-        hdulist.append(exthdu1)
-        exthdu2 = fits.ImageHDU(data=self.labels)
         hdulist.append(exthdu1)
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
