@@ -194,7 +194,7 @@ def fibers_guess(fiber_dataset, N_order=9):
     for k,argfib in enumerate(sorted_fib):
         guess_locs_thisfib = []
         for ends in fibers_unsorted[argfib]:
-            num_channels = fiber_dataset[0].shape[-1]
+            num_channels = fiber_dataset[0].data.shape[-1]
             this_order_guesspos = np.interp(np.arange(num_channels), [0, num_channels], ends)
             guess_locs_thisfib.append(this_order_guesspos)
         guess_locs.append(guess_locs_thisfib)
@@ -273,18 +273,23 @@ def trace(vec,x):
 
 def smooth(trace_calib):
     print('trace_calib',trace_calib)
-    polyfit_trace_calib = np.zeros(trace_calib.shape)+np.nan
-    smooth_trace_calib = np.zeros(trace_calib.shape)+np.nan
+    polyfit_trace_calib = data.TraceParams(locs=trace_calib.locs, widths=trace_calib.widths, labels=trace_calib.labels, header=trace_calib.header, filepath=trace_calib.filepath)
+    smooth_trace_calib = data.TraceParams(locs=trace_calib.locs, widths=trace_calib.widths, labels=trace_calib.labels, header=trace_calib.header, filepath=trace_calib.filepath)
     # paras0 = [A, w, y0, B, rn] or [A, w, y0, B, rn, g]?
-    x = np.arange(0, trace_calib.shape[2])
-    for fiber_num in np.arange(trace_calib.shape[0]):
-        for order_id in range(trace_calib.shape[1]):
-            for para_id in range(5):
-                print("fiber_num",fiber_num,"order_id",order_id, "para_id", para_id)
-                vec = trace_calib[fiber_num,order_id, :, para_id]
-                poly,smooth = trace(vec,x)
-                if poly is not None and smooth is not None:
-                    polyfit_trace_calib[fiber_num,order_id, :, para_id],smooth_trace_calib[fiber_num,order_id, :, para_id] = poly,smooth
+    x = np.arange(0, trace_calib.data.shape[2])
+    for fiber_num in np.arange(trace_calib.data.shape[0]):
+        for order_id in range(trace_calib.data.shape[1]):
+
+            vec = trace_calib.locs[fiber_num, order_id]
+            poly, smoothed = trace(vec,x)
+            polyfit_trace_calib.locs[fiber_num, order_id] = poly
+            smooth_trace_calib.locs[fiber_num, order_id] = smoothed
+
+            vec = trace_calib.widths[fiber_num, order_id]
+            poly, smoothed = trace(vec,x)
+            polyfit_trace_calib.widths[fiber_num, order_id] = poly
+            smooth_trace_calib.widths[fiber_num, order_id] = smoothed
+
     return polyfit_trace_calib,smooth_trace_calib
 
 def guess_star_fiber(image, fiber_params):

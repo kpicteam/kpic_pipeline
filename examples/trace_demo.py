@@ -56,7 +56,7 @@ input_data = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
 # read the master Background file
 bkgd = data.Background(filepath=background_med_filename)
 # read the bad pixel map
-badpixmap = data.BadPixelMap(persisbadpixmap_filename)
+badpixmap = data.BadPixelMap(filepath=persisbadpixmap_filename)
 
 # todo, ask JB why we need this
 badpixcube = np.tile(badpixmap.data[None,:,:],(len(filelist),1,1))
@@ -111,23 +111,14 @@ trace_calib = trace.fit_trace(cleaned_data, guess_fibers_params, fiber_list, num
 # Smooth the trace calibrations different ways, with polyfit or with spline. Only using the spline smoothing.
 _,smooth_trace_calib = trace.smooth(trace_calib)
 
-trace_width = smooth_trace_calib[:,:,:,1]
-trace_loc = smooth_trace_calib[:,:,:,2]
-
-hdulist = pyfits.HDUList()
-hdulist.append(pyfits.PrimaryHDU(data=trace_width,header=sci_hdrs[0]))
-hdulist.append(pyfits.ImageHDU(data=trace_loc))
-try:
-    hdulist.writeto(outfilename, overwrite=True)
-except TypeError:
-    hdulist.writeto(outfilename, clobber=True)
-hdulist.close()
-
+smooth_trace_calib.save(filedir=out_trace_dir, filename=os.path.basename(filelist[0]).replace(".fits","_trace.fits"))
 
 if 1:  # plot
-    hdulist = pyfits.open(outfilename)
-    trace_width = hdulist[0].data
-    trace_loc = hdulist[1].data
+    # hdulist = pyfits.open(outfilename)
+    # trace_width = hdulist[0].data
+    # trace_loc = hdulist[1].data
+    trace_width = smooth_trace_calib.widths
+    trace_loc = smooth_trace_calib.locs
 
     trace_loc_slit,trace_loc_dark = trace.get_background_traces(trace_loc)
 
