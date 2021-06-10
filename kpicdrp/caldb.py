@@ -1,27 +1,38 @@
-from kpicdrp.data import BasicData
 import pandas as pd
 import os
+import kpicdrp.data as data
 
-# CalDB - most generic class 
 class CalDB():
+    """
+    Most basic database type from which everything else inherits. Defines common functionality across all databases.
 
-    column_names = ["Filepath", "Type", "Date/Time of Obs."]
+    Database can be created by passing in column names or passing in a filename to load the database from disk.
 
-
-    def __init__(self, filepath=""):
-    
-     # If filepath is specified, read in file and dataframe saved as self.db
-        if len(filepath) > 0: 
-            self.filepath = filepath
-            self.data = pd.read_csv(filepath)
-            self.db = pd.DataFrame(self.data, columns = CalDB.column_names)
-            # only reads in data columns, not index
+    Args:
+        col_names (str): names of the columns in the database separated by commas; "Col1,Col2,Col3" 
+        filepath (str): filepath to a CSV file with an existing database
         
-    # If no filepath is specified, create an empty dataframe with column names
+    Fields:
+        db (pd.dataframe): the database that holds all data
+        columns (list): column names of dataframe
+        filename (str): file name that corresponds to the data (where it is read/written)
+        filedir(str): directory where the data is located
+        filepath(str): full filepath to data
+    """
+    def __init__(self, col_names=None, filepath=""):
+        # If no filepath is specified, create an empty dataframe with column names
+        if col_names is not None:
+            self.columns = col_names.split(',')
+            self.db = pd.DataFrame(columns = self.columns)
+        # If filepath is specified, read in file
+        elif len(filepath) > 0: 
+            self.filepath = filepath
+            self.db = pd.read_csv(filepath) 
+            self.columns = list(self.db.columns.values)
         else:
-            self.db = pd.DataFrame(columns = CalDB.column_names)
+            raise ValueError("Filepath and column_names cannot both be blank.")
 
-    # split up filepath into filename and filedir, copied from data.py BasicData class
+    # split up filepath into filename and filedir
         filepath_args = filepath.split(os.path.sep)
         if len(filepath_args) == 1:
             # no directory info in filepath, so current working directory
@@ -32,49 +43,87 @@ class CalDB():
             self.filedir = os.path.sep.join(filepath_args[:-1])
 
 
-    # Adds an entry to bottom of dataframe
-    def add_entry(self, new_entry):
-        # format of new_entry: BasicData(filepath="")
-        self.db = self.db.append(pd.DataFrame([[os.path.join(new_entry.filedir, new_entry.filename), new_entry.type, new_entry.time_obs]], columns = CalDB.column_names), ignore_index = True)
-        
+    def create_entry(self, entry):
+        """
+        Add a new entry to or update an existing one in the database. Each entry has 3 values: filepath, type, time of observation
 
-    # Updates an entry in the dataframe if know index, maintains same index as before
-    def update_entry(self, row_index, updated_entry):
-        # format of updated_entry: BasicData(filepath="")
-        self.db.loc[row_index,CalDB.column_names] = [os.path.join(updated_entry.filedir, updated_entry.filename), updated_entry.type, updated_entry.time_obs]
-
-
-    # Removes an entry in the dataframe if know index, resets index after dropping
-    def remove_entry(self, row_index):
-        # format of row_index: int
-        self.db = self.db.drop([self.db.index[row_index]])
-        self.db = self.db.reset_index(drop=True)
+        Args:
+            entry(BasicData obj): entry to add or update
+        """
+        if os.path.join(entry.filedir, entry.filename) in self.db.values:
+            row_index = self.db[self.db["Filepath"]==os.path.join(entry.filedir, entry.filename)].index.values
+            self.db.loc[row_index,self.columns] = [os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs]
+        else:
+            self.db = self.db.append(pd.DataFrame([[os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs]], columns = self.columns), ignore_index = True)
 
 
-    # Save dataframeto existing csv file or creates new one based on filepath
-    # saves with index in csv but code opens csv without index
+    def remove_entry(self, entry):
+        """
+        Remove an entry from the database. Removes all values associated with inputted filepath
+
+        Args:
+            entry(BasicData obj): entry to remove
+        """
+        if os.path.join(entry.filedir, entry.filename) in self.db.values:
+            entry_index = self.db[self.db["Filepath"]==os.path.join(entry.filedir, entry.filename)].index.values
+            self.db = self.db.drop(self.db.index[entry_index])
+            self.db = self.db.reset_index(drop=True)
+        else:
+            raise ValueError("No filepath found so could not remove.")
+
+
     def save(self, filename=None, filedir=None):
         """
-        Save file to disk with user specified filepath
+        Save file without numbered index to disk with user specified filepath as a CSV file 
 
         Args:
             filename (str): filepath to save to. Use self.filename if not specified
             filedir (str): filedir to save to. Use self.filedir if not specified
         """
-        # copied from data.py BasicData class
         if filename is not None:
             self.filename = filename
         if filedir is not None:
             self.filedir = filedir
         
-        self.filepath = os.path.join(self.filedir, self.filename)
+        filepath = os.path.join(self.filedir, self.filename)
+        self.db.to_csv(filepath, index=False)
+    
 
-        self.db = self.db.reset_index(drop=True) # reset index just in case
-        self.db.to_csv(self.filepath) 
+
+# subclass for Detector database
+class DetectorCalDB(CalDB):
+    """
+    A subclass of CalDB specialized for Background and BadPixelMap frames.
+
+    Args:
+        filepath (str): filepath to a CSV file with an existing DetectorCalDB database
+    """
+    def __init__(self, filepath=""):
+        super().__init__(filepath)
+        if len(filepath)==0:
+            self.columns = ["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds"]
+            self.db = pd.DataFrame(columns = self.columns)
+        elif len(filepath) > 0: 
+            self.filepath = filepath
+            self.db = pd.read_csv(filepath) 
+            self.columns = list(self.db.columns.values)
+
+        if self.columns !=["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds"]:
+            raise ValueError("This is not a DetectorCalDB. Please use a different type of database.")
 
 
-"""
-Other sample test code: 
-x.db.loc[index] to access a specific row if know the index as int
-x.db to view database
-"""
+    def create_entry(self, entry):
+        """
+        Add or update an entry in DetectorCalDB. Each entry has 5 values: Filepath, Type, Date/Time of Obs., Integration Time, Coadds
+        
+        Args:
+            entry (Background or BadPixelMap obj): entry to be added or updated in database
+        """
+        if not isinstance(entry, (data.Background,data.BadPixelMap)):
+            raise ValueError("Entry needs to be instance of Background or Bad Pixel Map")
+    
+        if os.path.join(entry.filedir, entry.filename) in self.db.values:
+            row_index= self.db[self.db["Filepath"]==os.path.join(entry.filedir, entry.filename)].index.values
+            self.db.loc[row_index,self.columns] = [os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]
+        else:
+            self.db = self.db.append(pd.DataFrame([[os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]], columns = self.columns), ignore_index = True)
