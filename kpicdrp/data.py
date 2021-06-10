@@ -291,7 +291,7 @@ class TraceParams(BasicData):
 
         # write labels to header
         for i, label in enumerate(self.labels):
-            self.header['FIB{0}'.label(i)] = label
+            self.header['FIB{0}'.format(i)] = label
 
         if filename is not None:
             self.filename = filename
