@@ -50,11 +50,11 @@ class CalDB():
         Args:
             entry(BasicData obj): entry to add or update
         """
-        if os.path.join(entry.filedir, entry.filename) in self.db.values:
-            row_index = self.db[self.db["Filepath"]==os.path.join(entry.filedir, entry.filename)].index.values
-            self.db.loc[row_index,self.columns] = [os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs]
+        if entry.filepath in self.db.values:
+            row_index = self.db[self.db["Filepath"]== entry.filepath].index.values
+            self.db.loc[row_index,self.columns] = [entry.filepath, entry.type, entry.time_obs]
         else:
-            self.db = self.db.append(pd.DataFrame([[os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs]], columns = self.columns), ignore_index = True)
+            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.type, entry.time_obs]], columns = self.columns), ignore_index = True)
 
 
     def remove_entry(self, entry):
@@ -64,8 +64,8 @@ class CalDB():
         Args:
             entry(BasicData obj): entry to remove
         """
-        if os.path.join(entry.filedir, entry.filename) in self.db.values:
-            entry_index = self.db[self.db["Filepath"]==os.path.join(entry.filedir, entry.filename)].index.values
+        if entry.filepath in self.db.values:
+            entry_index = self.db[self.db["Filepath"]==entry.filepath].index.values
             self.db = self.db.drop(self.db.index[entry_index])
             self.db = self.db.reset_index(drop=True)
         else:
@@ -99,7 +99,6 @@ class DetectorCalDB(CalDB):
         filepath (str): filepath to a CSV file with an existing DetectorCalDB database
     """
     def __init__(self, filepath=""):
-        super().__init__(filepath)
         if len(filepath)==0:
             self.columns = ["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds"]
             self.db = pd.DataFrame(columns = self.columns)
@@ -110,7 +109,15 @@ class DetectorCalDB(CalDB):
 
         if self.columns !=["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds"]:
             raise ValueError("This is not a DetectorCalDB. Please use a different type of database.")
-
+        
+        filepath_args = filepath.split(os.path.sep)
+        if len(filepath_args) == 1:
+            # no directory info in filepath, so current working directory
+            self.filedir = "."
+            self.filename = filepath_args[0]
+        else:
+            self.filename = filepath_args[-1]
+            self.filedir = os.path.sep.join(filepath_args[:-1])
 
     def create_entry(self, entry):
         """
@@ -122,8 +129,26 @@ class DetectorCalDB(CalDB):
         if not isinstance(entry, (data.Background,data.BadPixelMap)):
             raise ValueError("Entry needs to be instance of Background or Bad Pixel Map")
     
-        if os.path.join(entry.filedir, entry.filename) in self.db.values:
-            row_index= self.db[self.db["Filepath"]==os.path.join(entry.filedir, entry.filename)].index.values
-            self.db.loc[row_index,self.columns] = [os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]
+        if entry.filepath in self.db.values:
+            row_index= self.db[self.db["Filepath"]==entry.filepath].index.values
+            self.db.loc[row_index,self.columns] = [entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[os.path.join(entry.filedir, entry.filename), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]], columns = self.columns), ignore_index = True)
+            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]], columns = self.columns), ignore_index = True)
+
+    def get_calib(self, file):
+        """
+        Outputs the best calibration file to use when a raw file is inputted.
+
+        Args:
+            file(DetectorFrame object): raw data file to be calibrated, a BasicData object
+            choices (pd.dataframe): dataframe that holds selected calibration files that can be used 
+        """
+        self.choices = self.db[self.db["Integration Time"] == file.header["TRUITIME"]]
+        
+        if self.choices.empty is True:
+            return "No file with same Integration Time."
+        else:
+            self.choices = self.choices[self.choices["Coadds"] == file.header["Coadds"]]
+
+            if self.choices.empty is True:
+                return "No file with same Coadds."
