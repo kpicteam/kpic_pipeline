@@ -128,7 +128,7 @@ class DetectorCalDB(CalDB):
         Args:
             entry (Background or BadPixelMap obj): entry to be added or updated in database
         """
-        if not isinstance(entry, (data.Background,data.BadPixelMap)):
+        if not isinstance(entry, (Background,BadPixelMap)):
             raise ValueError("Entry needs to be instance of Background or Bad Pixel Map")
     
         if entry.filepath in self.db.values:
