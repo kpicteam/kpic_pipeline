@@ -7,7 +7,6 @@ from astropy.utils import data
 import numpy as np
 import astropy.io.fits as fits
 import astropy.time as time
-#from kpicdrp.caldb import DetectorCalDB
 
 
 class BasicData():
