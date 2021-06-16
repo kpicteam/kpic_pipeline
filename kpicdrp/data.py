@@ -7,6 +7,7 @@ from astropy.utils import data
 import numpy as np
 import astropy.io.fits as fits
 import astropy.time as time
+#from kpicdrp.caldb import DetectorCalDB
 
 
 class BasicData():
@@ -190,7 +191,7 @@ class Background(DetectorFrame):
         else: 
             self.noise = np.zeros(self.data.shape)
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filename=None, filedir=None, caldb=None):
         """
         Save file to disk with user specified filepath
 
@@ -215,6 +216,12 @@ class Background(DetectorFrame):
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
 
+        if caldb is not None:
+            self.caldb = caldb
+            self.caldb.create_entry(self)
+            self.caldb.save()
+
+
 class BadPixelMap(DetectorFrame):
     """
     A badpixelmap frame from the NIRSPEC detector. Has shape 2048x2048
@@ -227,7 +234,7 @@ class BadPixelMap(DetectorFrame):
         super().__init__(data, header, filepath)
 
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filename=None, filedir=None, caldb=None):
         """
         Save file to disk with user specified filepath
 
@@ -238,6 +245,12 @@ class BadPixelMap(DetectorFrame):
         self.header['CALIBTYP'] = "BadPixelMap"
 
         super().save(filename=filename, filedir=filedir)
+
+        if caldb is not None:
+            self.caldb = caldb
+            self.caldb.create_entry(self)
+            self.caldb.save()
+
 
     def mark_bad(self, frame):
         """
