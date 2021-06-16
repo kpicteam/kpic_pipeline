@@ -273,8 +273,8 @@ def trace(vec,x):
 
 def smooth(trace_calib):
     print('trace_calib',trace_calib)
-    polyfit_trace_calib = data.TraceParams(locs=trace_calib.locs, widths=trace_calib.widths, labels=trace_calib.labels, header=trace_calib.header, filepath=trace_calib.filepath)
-    smooth_trace_calib = data.TraceParams(locs=trace_calib.locs, widths=trace_calib.widths, labels=trace_calib.labels, header=trace_calib.header, filepath=trace_calib.filepath)
+    polyfit_trace_calib = trace_calib.copy() 
+    smooth_trace_calib = trace_calib.copy()
     # paras0 = [A, w, y0, B, rn] or [A, w, y0, B, rn, g]?
     x = np.arange(0, trace_calib.data.shape[2])
     for fiber_num in np.arange(trace_calib.data.shape[0]):
@@ -341,129 +341,6 @@ def guess_star_fiber(image, fiber_params):
     # return np.argmax([np.nansum(fiber1_template * flattened),np.nansum(fiber2_template * flattened),np.nansum(fiber3_template * flattened),np.nansum(fiber4_template * flattened)])
     return fiber_label[np.argmax(flat_ftemps)]
 
-def save(trace_calib,residuals,polyfit_trace_calib,smooth_trace_calib,calib_dir,mydate,header,plot=False):
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=trace_calib,header=header))
-    out = os.path.join(calib_dir, mydate+"_trace_allparas.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=trace_calib[:,:,:,1],header=header))
-    out = os.path.join(calib_dir, mydate+"_line_width.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=trace_calib[:,:,:,2],header=header))
-    out = os.path.join(calib_dir, mydate+"_trace_loc.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=residuals,header=header))
-    out = os.path.join(calib_dir, mydate+"_trace_residuals.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-
-    # if "20191215_kap_And" in mydir:
-    #     trace_calib[:,0:8,:,:] = trace_calib[:,1::,:,:]
-    #     trace_calib[:, 8, :, :] = np.nan
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=polyfit_trace_calib[:,:,:,1],header=header))
-    hdulist.append(pyfits.ImageHDU(data=trace_calib[:,:,:,1]-polyfit_trace_calib[:,:,:,1]))
-    out = os.path.join(calib_dir, mydate+"_line_width_smooth.fits")
-    try: hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=polyfit_trace_calib[:,:,:,2],header=header))
-    hdulist.append(pyfits.ImageHDU(data=trace_calib[:,:,:,2]-polyfit_trace_calib[:,:,:,2]))
-    out = os.path.join(calib_dir, mydate+"_trace_loc_smooth.fits")
-    try: hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    if plot: #plot
-        im = np.nanmean(cube,axis=0)
-        trace_loc_filename = glob(os.path.join(calib_dir, "*_trace_loc_smooth.fits"))[0]
-        hdulist = pyfits.open(trace_loc_filename)
-        trace_loc = hdulist[0].data
-        trace_loc[np.where(trace_loc == 0)] = np.nan
-        print(trace_loc.shape)
-        # plt.figure(1)
-        # for order_id in range(9):
-        #     plt.subplot(9, 1, 9-order_id)
-        #     plt.plot(trace_loc[1,order_id,:],linestyle="-",linewidth=2)
-        #     plt.legend()
-        # plt.show()
-
-        trace_loc_slit = np.zeros((trace_loc.shape[0] * 2, trace_loc.shape[1], trace_loc.shape[2]))
-        trace_loc_dark = np.zeros((trace_loc.shape[0] * 2, trace_loc.shape[1], trace_loc.shape[2]))
-        for order_id in range(9):
-            dy1 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[1, order_id, :]) / 2
-            dy2 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[2, order_id, :])
-            # exit()
-            if np.isnan(dy1):
-                dy1 = 10
-            if np.isnan(dy2):
-                dy2 = 40
-            print(dy1, dy2)
-
-            trace_loc_slit[0, order_id, :] = trace_loc[0, order_id, :] + dy1
-            trace_loc_slit[1, order_id, :] = trace_loc[1, order_id, :] + dy1
-            trace_loc_slit[2, order_id, :] = trace_loc[2, order_id, :] + dy1
-            trace_loc_slit[3, order_id, :] = trace_loc[0, order_id, :] + dy2
-            trace_loc_slit[4, order_id, :] = trace_loc[1, order_id, :] + dy2 + dy1
-            trace_loc_slit[5, order_id, :] = trace_loc[2, order_id, :] + dy2 + 2 * dy1
-
-            if order_id == 0:
-                trace_loc_dark[0, order_id, :] = trace_loc[0, order_id, :] + 1 * dy2 + dy1 + 2 * dy1
-                trace_loc_dark[1, order_id, :] = trace_loc[1, order_id, :] + 1 * dy2 + dy1 + 3 * dy1
-                trace_loc_dark[2, order_id, :] = trace_loc[2, order_id, :] + 1 * dy2 + dy1 + 4 * dy1
-                trace_loc_dark[3, order_id, :] = trace_loc[0, order_id, :] + 1 * dy2 + dy2 + 2 * dy1
-                trace_loc_dark[4, order_id, :] = trace_loc[1, order_id, :] + 1 * dy2 + dy2 + dy1 + 2 * dy1
-                trace_loc_dark[5, order_id, :] = trace_loc[2, order_id, :] + 1 * dy2 + dy2 + 2 * dy1 + 2 * dy1
-            else:
-                trace_loc_dark[0, order_id, :] = trace_loc[0, order_id, :] - 3 * dy2 + dy1 + 2 * dy1
-                trace_loc_dark[1, order_id, :] = trace_loc[1, order_id, :] - 3 * dy2 + dy1 + 3 * dy1
-                trace_loc_dark[2, order_id, :] = trace_loc[2, order_id, :] - 3 * dy2 + dy1 + 4 * dy1
-                trace_loc_dark[3, order_id, :] = trace_loc[0, order_id, :] - 3 * dy2 + dy2 + 2 * dy1
-                trace_loc_dark[4, order_id, :] = trace_loc[1, order_id, :] - 3 * dy2 + dy2 + dy1 + 2 * dy1
-                trace_loc_dark[5, order_id, :] = trace_loc[2, order_id, :] - 3 * dy2 + dy2 + 2 * dy1 + 2 * dy1
-
-        if plot:
-            plt.figure(1)
-            plt.imshow(im,origin="lower")
-            plt.clim([50,200])
-            for order_id in range(9):
-                for fib in range(3):
-                    plt.plot(trace_loc[fib, order_id, :], label="fibers", color="cyan",linestyle="--",linewidth=1)
-                for fib in np.arange(0,6):
-                    plt.plot(trace_loc_slit[fib, order_id, :], label="background", color="red",linestyle="-.",linewidth=1)
-                for fib in np.arange(0,6):
-                    plt.plot(trace_loc_dark[fib, order_id, :], label="dark", color="white",linestyle=":",linewidth=1)
-            plt.xlim([0,im.shape[1]])
-            plt.ylim([0,im.shape[0]])
-            plt.show()
 
 def load_filelist(filelist,background_med_filename,persisbadpixmap_filename):
     hdulist = pyfits.open(background_med_filename)
@@ -667,42 +544,50 @@ def run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True):
 # run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True)
 
 
-def get_background_traces(trace_loc):
+def add_background_traces(trace_dat):
     """
-    Returns fictitious trace location sampling the slit background and detector background (i.e., out of slit "dark")
+    Adds fictitious trace location sampling the slit background and detector background (i.e., out of slit "dark")
+    Labels for slit background is 'b1, b2, ..'
+    Labels for detector background (dark) is 'd1, d2..'
 
     Args:
-        trace_loc: list of size N_fibers of trace centers arrays with size (N_orders, Nx)
+        trace_dat (TraceParams): trace locations for the science fibers
+
+    Return:
+        new_trace_dat (TraceParams): trace locations with slit background and detector background traces included
     """
-    trace_loc_cp = copy(trace_loc)
-    trace_loc_cp[np.where(trace_loc_cp == 0)] = np.nan
+    new_trace_dat = trace_dat.copy()
 
-    trace_loc_slit = np.zeros((trace_loc_cp.shape[0], trace_loc_cp.shape[1], trace_loc_cp.shape[2]))
-    trace_loc_dark = np.zeros((trace_loc_cp.shape[0], trace_loc_cp.shape[1], trace_loc_cp.shape[2]))
+    trace_loc_slit = np.zeros((new_trace_dat.locs.shape[0], new_trace_dat.locs.shape[1], new_trace_dat.locs.shape[2]))
+    trace_loc_dark = np.zeros((new_trace_dat.locs.shape[0], new_trace_dat.locs.shape[1], new_trace_dat.locs.shape[2]))
 
-    # print(trace_loc_cp.shape)
-    # plt.figure(1)
-    # for order_id in range(9):
-    #     plt.subplot(9, 1, 9-order_id)
-    #     plt.plot(trace_loc_cp[1,order_id,:],linestyle="-",linewidth=2)
-    #     plt.legend()
-    # plt.show()
-
-    for order_id in range(trace_loc_cp.shape[1]):
-        dy1 = np.nanmean(trace_loc_cp[0, order_id, :] - trace_loc_cp[1, order_id, :]) / 2
-        dy2 = np.nanmean(trace_loc_cp[0, order_id, :] - trace_loc_cp[-1, order_id, :])
+    for order_id in range(new_trace_dat.locs.shape[1]):
+        dy1 = np.nanmean(new_trace_dat.locs[0, order_id, :] - new_trace_dat.locs[1, order_id, :]) / 2
+        dy2 = np.nanmean(new_trace_dat.locs[0, order_id, :] - new_trace_dat.locs[-1, order_id, :])
         # exit()
         if np.isnan(dy1):
             dy1 = 10
         if np.isnan(dy2):
             dy2 = 40
-        for fib_id in range(trace_loc_cp.shape[0]):
+        for fib_id in range(new_trace_dat.locs.shape[0]):
 
-            trace_loc_slit[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] - dy1
+            trace_loc_slit[fib_id, order_id, :] = new_trace_dat.locs[fib_id, order_id, :] - dy1
 
             if order_id == 0:
-                trace_loc_dark[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] + 1.5 * dy2 - fib_id * dy1
+                trace_loc_dark[fib_id, order_id, :] = new_trace_dat.locs[fib_id, order_id, :] + 1.5 * dy2 - fib_id * dy1
             else:
-                trace_loc_dark[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] - 3 * dy2 + (3 + fib_id) * dy1
+                trace_loc_dark[fib_id, order_id, :] = new_trace_dat.locs[fib_id, order_id, :] - 3 * dy2 + (3 + fib_id) * dy1
 
-    return trace_loc_slit, trace_loc_dark
+
+    # add slit and dark traces to trace params
+    # first the slit backgrounds
+    new_trace_dat.locs = np.append(new_trace_dat.ocs, trace_loc_slit, axis=0)
+    new_trace_dat.widths = np.append(new_trace_dat.widths, new_trace_dat.widths, axis=0)
+    new_trace_dat.labels = new_trace_dat.labels + ['b{0}' for i in range(trace_loc_slit.shape[0])]
+    # next the traces
+    new_trace_dat.locs = np.append(new_trace_dat.ocs, trace_loc_dark, axis=0)
+    new_trace_dat.widths = np.append(new_trace_dat.widths, new_trace_dat.widths, axis=0)
+    new_trace_dat.labels = new_trace_dat.labels + ['d{0}' for i in range(trace_loc_dark.shape[0])]
+
+
+    return new_trace_dat

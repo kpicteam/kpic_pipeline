@@ -307,3 +307,19 @@ class TraceParams(BasicData):
         hdulist.append(exthdu1)
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
+
+    def copy(self):
+        """
+        Makes a copy of itself and return the copy. Deep copy of numpy arrays and headers
+
+        Return:
+            copy_trace (TraceParams): a copy of this TraceParams file
+        """
+
+        copy_trace = TraceParams(locs=np.copy(self.locs), 
+                                widths=np.copy(self.widths), 
+                                labels=self.labels.copy(), 
+                                header=self.header.copy(), 
+                                filepath=self.filepath)
+
+        return copy_trace
