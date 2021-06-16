@@ -159,7 +159,7 @@ class DetectorCalDB(CalDB):
             result_index = np.where(min(abs(MJD_time-file_time)))
             calib_filepath = self.options.iloc[int(result_index[0]),0]
 
-            self.bpm_calib =  BadPixelMap(filepath=calib_filepath)
+            return BadPixelMap(filepath=calib_filepath)
 
         elif self.type == "Background":
             self.calibdf = self.db[self.db["Type"]=="bkgd"]
@@ -172,7 +172,7 @@ class DetectorCalDB(CalDB):
             result_index = np.where(min(abs(MJD_time-file_time)))
             calib_filepath = self.options.iloc[int(result_index[0]),0]
 
-            self.bkgd_calib = Background(filepath=calib_filepath)
+            return Background(filepath=calib_filepath)
 
         else:
             raise ValueError("Specify type of calibration--Background or BadPixelMap")
