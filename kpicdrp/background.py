@@ -153,16 +153,17 @@ def create_background_badpixelmap(background_frames, fileprefix=None, plot=False
 
     return master_bkgd, badpixmap
 
-def process_backgrounds(frames, plot=False, save_loc=None, fileprefix=None):
+def process_backgrounds(frames, plot=False, save_loc=None, fileprefix=None, caldb_save_loc=None):
     """
     Function to bach process a series of thermal background images taken at different exposure times
     Saves background and bad pixel maps to the directory specified by save_loc
 
     Args:
-        frames (data.Dataset): Dataset of frames to be processed as backgroudn frames
+        frames (data.Dataset): Dataset of frames to be processed as background frames
         plot (bool): if True, plots the images. Default is false
         save_loc (str): if defined, the filepath to the directory to save the images.
         fileprefix (str): if defined, a prefix to prepend to each saved file. If none, uses input filename.  
+        caldb_save_loc(DetectorCalDB object): if defined, the calibration database to keep track of calibrated files
     """
 
     # check through all the file headers to figure out what exposure times we have
@@ -205,11 +206,15 @@ def process_backgrounds(frames, plot=False, save_loc=None, fileprefix=None):
                 plt.figure()
                 plt.imshow(background_med.data, interpolation="nearest",origin="lower")
                 plt.show()
-
+            
             if save_loc is not None:
                 background_med.save(filedir=save_loc)
                 persistent_badpix.save(filedir=save_loc)
-
-
+            
+            if caldb_save_loc is not None:
+                background_med.save(caldb=caldb_save_loc)
+                persistent_badpix.save(caldb=caldb_save_loc)
+            
+            
     return(background_meds,persistent_badpixs,tint_outlist,coadd_outlist)
 
