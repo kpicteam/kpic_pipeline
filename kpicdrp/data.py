@@ -196,6 +196,7 @@ class Background(DetectorFrame):
 
         Args:
             filename (str): filepath to save to. Use self.filename if not specified
+            caldb (DetectorCalDB object): if specified, calibration database to keep track of files
         """
         self.header['ISCALIB'] = True
         self.header['CALIBTYP'] = "Background"
@@ -239,6 +240,7 @@ class BadPixelMap(DetectorFrame):
 
         Args:
             filename (str): filepath to save to. Use self.filename if not specified
+            caldb (DetectorCalDB object): if specified, calibration database to keep track of files
         """
         self.header['ISCALIB'] = True
         self.header['CALIBTYP'] = "BadPixelMap"
