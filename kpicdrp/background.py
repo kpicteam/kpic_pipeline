@@ -149,7 +149,7 @@ def create_background_badpixelmap(background_frames, fileprefix=None, plot=False
     for calib_frame in [master_bkgd, badpixmap]:
         calib_frame.header['DRPNFILE'] = len(background_frames)
         for i in range(len(background_frames)):
-            calib_frame.header['FILE_{0}'.format(i)] = background_frames[0].filename
+            calib_frame.header['FILE_{0}'.format(i)] = background_frames[i].filename
 
     return master_bkgd, badpixmap
 
