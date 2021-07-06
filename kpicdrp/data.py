@@ -21,7 +21,7 @@ class BasicData():
         header: corresponding header
         filepath (str): filepath to a FITS file with data/header information  
 
-    Fields:
+    Attributes:
         data (np.array): the actual data
         header: corresponding header
         filename (str): filepath that corresponds to the data (where it is read/written)
@@ -323,3 +323,72 @@ class TraceParams(BasicData):
                                 filepath=self.filepath)
 
         return copy_trace
+
+class Spectrum(BasicData):
+    """
+    Extracted spectral data. Supports data from multiple traces and orders.
+
+    Args:
+        flux (np.array): extracted fluxes. Dimensions are (N_traces x N_orders x N_columns)
+        errs (np.array): uncertainties on fluxes. (N_traces x N_orders x N_columns)
+        wavecal (Wavecal): wavelength calibration if desired (optional)
+        header: FITS header (only needed if creating a new object from scratch)
+        filepath (str): path to file
+
+    Attributes:
+        flux: extracted fluxes. Dimensions are (N_traces x N_orders x N_columns)
+        errs: uncertainties on fluxes. (N_traces x N_orders x N_columns)
+        wvs: corresponding wavelengths if calibrated. (N_traces x N_orders x N_columns)
+    """
+    type = "spectrum"
+
+    def __init__(self, flux=None, errs=None, wavecal=None, header=None, filepath=""):
+        super().__init__(flux, header, filepath)
+
+        if errs is None:
+            self.errs = errs
+        else:
+            self.errs = self.extdata[0]
+
+        if wvs is not None:
+            self._wvs = wavecal.wvs
+            self.header['WAVCALIB'] = True
+            self.header['WAVEFILE'] = wavecal.filename
+        elif len(self.extdata) > 1:
+            self._wvs = self.extdata[1]
+        else:
+            self._wvs = None
+
+    # create the data field dynamically 
+    @property
+    def wvs(self):
+        if self._wvs is None:
+            raise ValueError("This spectrum is not wavelength calibrated.")
+        else:
+            return self._wvs
+
+class Wavecal(BasicData):
+    """
+    Wavelength calibration file
+
+    Attributes:
+        wvs: corresponding wavelengths if calibrated. (N_traces x N_orders x N_columns)
+    """
+    type = "wavecal"
+
+    def __init__(self, data=None, header=None, filepath=""):
+        super().__init__(data, header, filepath)
+        self.wvs = self.data
+
+    def save(self, filename=None, filedir=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filename (str): filename to use. Use self.filename if not specified
+            filedir (str): directory to save the filename to. Use self.filepath if not specified
+        """
+        self.header['ISCALIB'] = True
+        self.header['CALIBTYP'] = "Wavecal"
+
+        super().save(filename=filename, filedir=filedir)
