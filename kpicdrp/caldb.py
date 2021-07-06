@@ -1,6 +1,8 @@
 import pandas as pd
 import os
-import kpicdrp.data as data
+from astropy.time import Time
+import numpy as np
+from kpicdrp.data import BadPixelMap, Background
 
 class CalDB():
     """
@@ -126,7 +128,7 @@ class DetectorCalDB(CalDB):
         Args:
             entry (Background or BadPixelMap obj): entry to be added or updated in database
         """
-        if not isinstance(entry, (data.Background,data.BadPixelMap)):
+        if not isinstance(entry, (Background,BadPixelMap)):
             raise ValueError("Entry needs to be instance of Background or Bad Pixel Map")
     
         if entry.filepath in self.db.values:
@@ -135,20 +137,42 @@ class DetectorCalDB(CalDB):
         else:
             self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]], columns = self.columns), ignore_index = True)
 
-    def get_calib(self, file):
+    def get_calib(self, file, type=""):
         """
-        Outputs the best calibration file to use when a raw file is inputted.
+        Outputs the best calibration file (same Integration Time and Coadds and then searches for the most similar time) to use when a raw file is inputted.
+        Use self.bpm_calib for BadPixelMap and self.bkgd_calib for Background calibration objects respectively
 
         Args:
-            file(DetectorFrame object): raw data file to be calibrated, a BasicData object
-            choices (pd.dataframe): dataframe that holds selected calibration files that can be used 
+            file (DetectorFrame object): raw data file to be calibrated
+            type (str): "Background" or "BadPixelMap"
         """
-        self.choices = self.db[self.db["Integration Time"] == file.header["TRUITIME"]]
-        
-        if self.choices.empty is True:
-            return "No file with same Integration Time."
-        else:
-            self.choices = self.choices[self.choices["Coadds"] == file.header["Coadds"]]
+        self.type = type
 
-            if self.choices.empty is True:
-                return "No file with same Coadds."
+        if self.type == "BadPixelMap":
+            self.calibdf = self.db[self.db["Type"]=="badpixmap"]
+            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]))]
+            self.options["Date/Time of Obs."]=pd.to_datetime(self.options["Date/Time of Obs."])
+            MJD_time = Time(self.options["Date/Time of Obs."]).mjd
+                 
+            file_time = Time(file.time_obs).mjd
+
+            result_index = np.where(min(abs(MJD_time-file_time)))
+            calib_filepath = self.options.iloc[int(result_index[0]),0]
+
+            return BadPixelMap(filepath=calib_filepath)
+
+        elif self.type == "Background":
+            self.calibdf = self.db[self.db["Type"]=="bkgd"]
+            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]))]
+            self.options["Date/Time of Obs."]=pd.to_datetime(self.options["Date/Time of Obs."])
+            MJD_time = Time(self.options["Date/Time of Obs."]).mjd
+                 
+            file_time = Time(file.time_obs).mjd
+
+            result_index = np.where(min(abs(MJD_time-file_time)))
+            calib_filepath = self.options.iloc[int(result_index[0]),0]
+
+            return Background(filepath=calib_filepath)
+
+        else:
+            raise ValueError("Specify type of calibration--Background or BadPixelMap")

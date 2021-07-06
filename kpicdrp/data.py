@@ -190,12 +190,13 @@ class Background(DetectorFrame):
         else: 
             self.noise = np.zeros(self.data.shape)
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filename=None, filedir=None, caldb=None):
         """
         Save file to disk with user specified filepath
 
         Args:
             filename (str): filepath to save to. Use self.filename if not specified
+            caldb (DetectorCalDB object): if specified, calibration database to keep track of files
         """
         self.header['ISCALIB'] = True
         self.header['CALIBTYP'] = "Background"
@@ -215,6 +216,12 @@ class Background(DetectorFrame):
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
 
+        if caldb is not None:
+            self.caldb = caldb
+            self.caldb.create_entry(self)
+            self.caldb.save()
+
+
 class BadPixelMap(DetectorFrame):
     """
     A badpixelmap frame from the NIRSPEC detector. Has shape 2048x2048
@@ -227,17 +234,24 @@ class BadPixelMap(DetectorFrame):
         super().__init__(data, header, filepath)
 
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filename=None, filedir=None, caldb=None):
         """
         Save file to disk with user specified filepath
 
         Args:
             filename (str): filepath to save to. Use self.filename if not specified
+            caldb (DetectorCalDB object): if specified, calibration database to keep track of files
         """
         self.header['ISCALIB'] = True
         self.header['CALIBTYP'] = "BadPixelMap"
 
         super().save(filename=filename, filedir=filedir)
+
+        if caldb is not None:
+            self.caldb = caldb
+            self.caldb.create_entry(self)
+            self.caldb.save()
+
 
     def mark_bad(self, frame):
         """
