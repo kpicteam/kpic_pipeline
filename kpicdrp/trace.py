@@ -393,7 +393,7 @@ def load_filelist(filelist,background_med_filename,persisbadpixmap_filename):
     # return cube,badpixcube,fiber_list,ny,nx
     return cube,badpixcube,ny,nx
 
-def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=30, fitbackground=False, return_residuals=False):
+def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=30, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
 
     ##calculate traces, FWHM, stellar spec for each fibers
     # fiber,order,x,[y,yerr,FWHM,FHWMerr,flux,fluxerr],
@@ -500,6 +500,9 @@ def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=30, fitbackgro
     tnow = time.Time.now()
     trace_params.header['HISTORY'] = "[{0}] Fit {1} fiber traces in {2} orders".format(str(tnow), num_fibers, Norders)
 
+    if add_bkgd_traces:
+        trace_params = add_background_traces(trace_params)
+
     if return_residuals:
         return trace_params, residuals
     else:
@@ -543,13 +546,13 @@ def add_background_traces(trace_dat):
 
     # add slit and dark traces to trace params
     # first the slit backgrounds
-    new_trace_dat.locs = np.append(new_trace_dat.ocs, trace_loc_slit, axis=0)
+    new_trace_dat.locs = np.append(new_trace_dat.locs, trace_loc_slit, axis=0)
     new_trace_dat.widths = np.append(new_trace_dat.widths, new_trace_dat.widths, axis=0)
-    new_trace_dat.labels = new_trace_dat.labels + ['b{0}' for i in range(trace_loc_slit.shape[0])]
+    new_trace_dat.labels = np.append(new_trace_dat.labels,  ['b{0}'.format(i) for i in range(trace_loc_slit.shape[0])])
     # next the traces
-    new_trace_dat.locs = np.append(new_trace_dat.ocs, trace_loc_dark, axis=0)
+    new_trace_dat.locs = np.append(new_trace_dat.locs, trace_loc_dark, axis=0)
     new_trace_dat.widths = np.append(new_trace_dat.widths, new_trace_dat.widths, axis=0)
-    new_trace_dat.labels = new_trace_dat.labels + ['d{0}' for i in range(trace_loc_dark.shape[0])]
+    new_trace_dat.labels = np.append(new_trace_dat.labels,  ['d{0}'.format(i) for i in range(trace_loc_slit.shape[0])])
 
 
     return new_trace_dat
