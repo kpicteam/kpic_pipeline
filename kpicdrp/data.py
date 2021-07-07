@@ -400,8 +400,8 @@ class Wavecal(BasicData):
     """
     type = "wavecal"
 
-    def __init__(self, data=None, header=None, filepath=""):
-        super().__init__(data, header, filepath)
+    def __init__(self, wvs=None, header=None, filepath=""):
+        super().__init__(wvs, header, filepath)
         self.wvs = self.data
 
     def save(self, filename=None, filedir=None):
