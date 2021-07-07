@@ -1,4 +1,5 @@
 import astropy.io.fits as pyfits
+import astropy.time as time
 import os
 from glob import glob
 import matplotlib.pyplot as plt
@@ -12,7 +13,7 @@ from scipy.optimize import minimize
 import itertools
 # from utils.badpix import *
 # from utils.misc import *
-import pandas as pd
+
 
 from scipy.signal import find_peaks
 from scipy.interpolate import InterpolatedUnivariateSpline
@@ -204,6 +205,9 @@ def fibers_guess(fiber_dataset, N_order=9):
     guess_labels = np.array(guess_labels)
     guess_widths = np.ones(guess_locs.shape) * (3 / (2 * np.sqrt(2 * np.log(2))))
     guess_params = data.TraceParams(locs=guess_locs, widths=guess_widths, labels=guess_labels, header=fiber_dataset[0].header)
+    guess_params.add_parent_filenames(fiber_dataset)
+    tnow = time.Time.now()
+    guess_params.header['HISTORY'] = "[{0}] Guessed {1} fiber traces".format(str(tnow), len(sorted_fib))
 
     return guess_params
 
@@ -289,6 +293,10 @@ def smooth(trace_calib):
             poly, smoothed = trace(vec,x)
             polyfit_trace_calib.widths[fiber_num, order_id] = poly
             smooth_trace_calib.widths[fiber_num, order_id] = smoothed
+
+    tnow = time.Time.now()
+    trace_calib.header['HISTORY'] = "[{0}] Fiber params smoothed".format(str(tnow))
+
 
     return polyfit_trace_calib,smooth_trace_calib
 
@@ -487,61 +495,15 @@ def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=30, fitbackgro
     trace_params = data.TraceParams(locs=trace_calib[:,:,:,2], widths=trace_calib[:,:,:,1], labels=guess_params.labels, header=fiber_dataset[0].header)
     trace_params.filedir = fiber_dataset[0].filedir
     trace_params.filename = fiber_dataset[0].filename[:-5] + "_trace.fits"
+    # add data reduction history
+    trace_params.add_parent_filenames(fiber_dataset)
+    tnow = time.Time.now()
+    trace_params.header['HISTORY'] = "[{0}] Fit {1} fiber traces in {2} orders".format(str(tnow), num_fibers, Norders)
 
     if return_residuals:
         return trace_params, residuals
     else:
         return trace_params
-
-# main_dir = "/Users/eeswim/Dropbox/kpic_pipeline/public_kpic_data/" #"../../kpic_analysis/tutorial_data/" # main data dir
-# obj_folder = "20200702_HIP_81497"
-
-def run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True):
-    
-    target_dir = os.path.join(main_dir,obj_folder) # the star of interest
-    calib_dir = os.path.join(target_dir, "calib") # calib subdir
-    raw_data_dir = os.path.join(target_dir, "raw") # raw 2D images
-
-    mydate = os.path.basename(target_dir).split("_")[0] # assumes folder is in "20200702_HIP_81497" format
-
-    filelist = glob(os.path.join(raw_data_dir, "*.fits"))
-    hdulist = pyfits.open(filelist[0])
-    header = hdulist[0].header
-
-    background_med_filename = glob(os.path.join(calib_dir,"*background*.fits"))[0]
-    persisbadpixmap_filename = glob(os.path.join(calib_dir,"*persistent_badpix*.fits"))[0]
-
-    # cube,badpixcube,fiber_list,ny,nx = load_filelist(filelist,background_med_filename,persisbadpixmap_filename)
-    cube,badpixcube,ny,nx = load_filelist(filelist,background_med_filename,persisbadpixmap_filename)
-
-    if make_guess:
-        fibers = fibers_guess(cube-badpixcube,N_order=N_order)
-    else: 
-        fiber1 = [[70, 150], [260, 330], [460, 520], [680 - 10, 720 + 10], [900 - 15, 930 + 15], [1120 - 5, 1170 + 5],
-                  [1350, 1420], [1600, 1690], [1870, 1980]]
-        fiber2 = [[50, 133], [240, 320], [440, 510], [650, 710], [880 - 15, 910 + 15], [1100 - 5, 1150 + 5], [1330, 1400],
-                  [1580, 1670], [1850, 1960]]
-        fiber3 = [[30, 120], [220, 300], [420, 490], [640 - 5, 690 + 5], [865 - 20, 890 + 20], [1090 - 10, 1130 + 10],
-                  [1320, 1380], [1570, 1650], [1840, 1940]]
-        fibers = {0: fiber1, 1: fiber2, 2: fiber3}
-
-        # if usershift != 0:
-        #     all fiber numbers + usershift
-
-    fiber_list = []
-    for image in cube-badpixcube:
-        fiber_list.append(guess_star_fiber(image,fibers))
-
-    # print(fibers,fiber_list,cube,badpixcube,ny,nx,N_order)
-
-    trace_calib,residuals = fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order,numthreads=30,fitbackground=False)
-
-    polyfit_trace_calib,smooth_trace_calib = smooth(trace_calib)
-
-    save(trace_calib,residuals,polyfit_trace_calib,smooth_trace_calib,calib_dir,mydate,header,plot=False)
-
-
-# run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True)
 
 
 def add_background_traces(trace_dat):

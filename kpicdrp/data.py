@@ -90,6 +90,16 @@ class BasicData():
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
 
+    def add_parent_filenames(self, parent_data):
+        if isinstance(parent_data, Dataset):
+            # multiple files
+            self.header['DRPNFILE'] = len(parent_data)
+            for i in range(len(parent_data)):
+                self.header['FILE_{0}'.format(i)] = parent_data[i].filename
+        elif isinstance(parent_data, BasicData):
+            # single frame
+            self.header['DRPNFILE'] = 1
+            self.header['FILE_{0}'.format(0)] = parent_data.filename
 
 
 class Dataset():
@@ -364,7 +374,7 @@ class Spectrum(BasicData):
         else:
             self.errs = self.extdata[0]
 
-        if wvs is not None:
+        if wavecal is not None:
             self._wvs = wavecal.wvs
             self.header['WAVCALIB'] = True
             self.header['WAVEFILE'] = wavecal.filename

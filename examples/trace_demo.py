@@ -120,12 +120,12 @@ if 1:  # plot
     trace_width = smooth_trace_calib.widths
     trace_loc = smooth_trace_calib.locs
 
-    trace_loc_slit,trace_loc_dark = trace.get_background_traces(trace_loc)
+    # trace_loc_slit,trace_loc_dark = trace.get_background_traces(trace_loc)
 
     plt.figure(2)
     for order_id in range(9):
         for fib in range(trace_loc.shape[0]):
             plt.plot(trace_loc[fib, order_id, :], label="fibers", color="cyan", linestyle="-", linewidth=1)
-            plt.plot(trace_loc_slit[fib, order_id, :], label="fibers", color="grey", linestyle="--", linewidth=1)
-            plt.plot(trace_loc_dark[fib, order_id, :], label="fibers", color="black", linestyle="--", linewidth=1)
+            # plt.plot(trace_loc_slit[fib, order_id, :], label="fibers", color="grey", linestyle="--", linewidth=1)
+            # plt.plot(trace_loc_dark[fib, order_id, :], label="fibers", color="black", linestyle="--", linewidth=1)
     plt.show()

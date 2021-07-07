@@ -147,9 +147,7 @@ def create_background_badpixelmap(background_frames, fileprefix=None, plot=False
     badpixmap.header['HISTORY'] = "[{0}] Combined into bad pixel file".format(str(tnow))
     # write to header all the files that were used in making this file
     for calib_frame in [master_bkgd, badpixmap]:
-        calib_frame.header['DRPNFILE'] = len(background_frames)
-        for i in range(len(background_frames)):
-            calib_frame.header['FILE_{0}'.format(i)] = background_frames[i].filename
+        calib_frame.add_parent_filenames(background_frames)
 
     return master_bkgd, badpixmap
 
