@@ -102,14 +102,14 @@ class DetectorCalDB(CalDB):
     """
     def __init__(self, filepath=""):
         if len(filepath)==0:
-            self.columns = ["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds"]
+            self.columns = ["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds","# of Files Used"]
             self.db = pd.DataFrame(columns = self.columns)
         elif len(filepath) > 0: 
             self.filepath = filepath
             self.db = pd.read_csv(filepath) 
             self.columns = list(self.db.columns.values)
 
-        if self.columns !=["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds"]:
+        if self.columns !=["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds","# of Files Used"]:
             raise ValueError("This is not a DetectorCalDB. Please use a different type of database.")
         
         filepath_args = filepath.split(os.path.sep)
@@ -123,7 +123,7 @@ class DetectorCalDB(CalDB):
 
     def create_entry(self, entry):
         """
-        Add or update an entry in DetectorCalDB. Each entry has 5 values: Filepath, Type, Date/Time of Obs., Integration Time, Coadds
+        Add or update an entry in DetectorCalDB. Each entry has 6 values: Filepath, Type, Date/Time of Obs., Integration Time, Coadds, # of Files Used
         
         Args:
             entry (Background or BadPixelMap obj): entry to be added or updated in database
@@ -133,14 +133,13 @@ class DetectorCalDB(CalDB):
     
         if entry.filepath in self.db.values:
             row_index= self.db[self.db["Filepath"]==entry.filepath].index.values
-            self.db.loc[row_index,self.columns] = [entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]
+            self.db.loc[row_index,self.columns] = [entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"]]], columns = self.columns), ignore_index = True)
+            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]], columns = self.columns), ignore_index = True)
 
     def get_calib(self, file, type=""):
         """
-        Outputs the best calibration file (same Integration Time and Coadds and then searches for the most similar time) to use when a raw file is inputted.
-        Use self.bpm_calib for BadPixelMap and self.bkgd_calib for Background calibration objects respectively
+        Outputs the best calibration file (same Integration Time and Coadds, >1 # of Files Used, and then searches for the most similar time) to use when a raw file is inputted.
 
         Args:
             file (DetectorFrame object): raw data file to be calibrated
@@ -150,7 +149,7 @@ class DetectorCalDB(CalDB):
 
         if self.type == "BadPixelMap":
             self.calibdf = self.db[self.db["Type"]=="badpixmap"]
-            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]))]
+            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]) & (self.calibdf["# of Files Used"] > 1))]
             self.options["Date/Time of Obs."]=pd.to_datetime(self.options["Date/Time of Obs."])
             MJD_time = Time(self.options["Date/Time of Obs."]).mjd
                  
@@ -163,7 +162,7 @@ class DetectorCalDB(CalDB):
 
         elif self.type == "Background":
             self.calibdf = self.db[self.db["Type"]=="bkgd"]
-            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]))]
+            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]) & (self.calibdf["# of Files Used"] > 1))]
             self.options["Date/Time of Obs."]=pd.to_datetime(self.options["Date/Time of Obs."])
             MJD_time = Time(self.options["Date/Time of Obs."]).mjd
                  
