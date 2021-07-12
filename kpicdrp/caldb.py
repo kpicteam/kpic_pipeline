@@ -2,7 +2,7 @@ import pandas as pd
 import os
 from astropy.time import Time
 import numpy as np
-from kpicdrp.data import BadPixelMap, Background
+from kpicdrp.data import BadPixelMap, Background, TraceParams
 
 class CalDB():
     """
@@ -91,8 +91,6 @@ class CalDB():
         self.db.to_csv(filepath, index=False)
     
 
-
-# subclass for Detector database
 class DetectorCalDB(CalDB):
     """
     A subclass of CalDB specialized for Background and BadPixelMap frames.
@@ -155,8 +153,8 @@ class DetectorCalDB(CalDB):
                  
             file_time = Time(file.time_obs).mjd
 
-            result_index = np.where(min(abs(MJD_time-file_time)))
-            calib_filepath = self.options.iloc[int(result_index[0]),0]
+            result_index = np.abs(MJD_time-file_time).argmin() 
+            calib_filepath = self.options.iloc[result_index,0]
 
             return BadPixelMap(filepath=calib_filepath)
 
@@ -168,8 +166,8 @@ class DetectorCalDB(CalDB):
                  
             file_time = Time(file.time_obs).mjd
 
-            result_index = np.where(min(abs(MJD_time-file_time)))
-            calib_filepath = self.options.iloc[int(result_index[0]),0]
+            result_index = np.abs(MJD_time-file_time).argmin() 
+            calib_filepath = self.options.iloc[result_index,0]
 
             return Background(filepath=calib_filepath)
 
