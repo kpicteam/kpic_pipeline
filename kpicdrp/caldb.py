@@ -9,6 +9,7 @@ class CalDB():
     Most basic database type from which everything else inherits. Defines common functionality across all databases.
 
     Database can be created by passing in column names or passing in a filename to load the database from disk.
+    Structure can be used to create new database types - replace column names
 
     Args:
         col_names (str): names of the columns in the database separated by commas; "Col1,Col2,Col3" 
@@ -48,6 +49,7 @@ class CalDB():
     def create_entry(self, entry):
         """
         Add a new entry to or update an existing one in the database. Each entry has 3 values: filepath, type, time of observation
+        Structure can be used to create new database types - replace column data
 
         Args:
             entry(BasicData obj): entry to add or update
@@ -62,6 +64,7 @@ class CalDB():
     def remove_entry(self, entry):
         """
         Remove an entry from the database. Removes all values associated with inputted filepath
+        Function can be used for any type of database
 
         Args:
             entry(BasicData obj): entry to remove
@@ -77,6 +80,7 @@ class CalDB():
     def save(self, filename=None, filedir=None):
         """
         Save file without numbered index to disk with user specified filepath as a CSV file 
+        Function can be used for any type of database
 
         Args:
             filename (str): filepath to save to. Use self.filename if not specified
@@ -93,7 +97,7 @@ class CalDB():
 
 class DetectorCalDB(CalDB):
     """
-    A subclass of CalDB specialized for Background and BadPixelMap frames.
+    A subclass of CalDB specialized for Background and BadPixelMap frames
 
     Args:
         filepath (str): filepath to a CSV file with an existing DetectorCalDB database
@@ -121,7 +125,8 @@ class DetectorCalDB(CalDB):
 
     def create_entry(self, entry):
         """
-        Add or update an entry in DetectorCalDB. Each entry has 6 values: Filepath, Type, Date/Time of Obs., Integration Time, Coadds, # of Files Used
+        Add or update an entry in DetectorCalDB
+        Each entry has 6 values: Filepath, Type, Date/Time of Obs., Integration Time, Coadds, # of Files Used
         
         Args:
             entry (Background or BadPixelMap obj): entry to be added or updated in database
@@ -137,7 +142,7 @@ class DetectorCalDB(CalDB):
 
     def get_calib(self, file, type=""):
         """
-        Outputs the best calibration file (same Integration Time and Coadds, >1 # of Files Used, and then searches for the most similar time) to use when a raw file is inputted.
+        Outputs the best calibration file (same Integration Time and Coadds, >1 # of Files Used, and then searches for the most similar time) to use when a raw file is inputted
 
         Args:
             file (DetectorFrame object): raw data file to be calibrated
@@ -173,3 +178,80 @@ class DetectorCalDB(CalDB):
 
         else:
             raise ValueError("Specify type of calibration--Background or BadPixelMap")
+
+
+class TraceCalDB(CalDB):
+    """
+    A subclass of CalDB specialized for trace parameter data
+
+    Args:
+        filepath (str): filepath to a CSV file with an existing TraceCalDB database
+    """
+    def __init__(self, filepath=""):
+        if len(filepath)==0:
+            self.columns = ["Filepath","Date/Time of Obs.", "s1", "s2","s3","s4","c0", "c1", "Echelle Position", "X-Disperser Position"]
+            self.db = pd.DataFrame(columns = self.columns)
+        elif len(filepath) > 0: 
+            self.filepath = filepath
+            self.db = pd.read_csv(filepath) 
+            self.columns = list(self.db.columns.values)
+
+        if self.columns !=["Filepath","Date/Time of Obs.", "s1", "s2","s3","s4","c0", "c1", "Echelle Position", "X-Disperser Position"]:
+            raise ValueError("This is not a TraceCalDB. Please use a different type of database.")
+        
+        filepath_args = filepath.split(os.path.sep)
+        if len(filepath_args) == 1:
+            # no directory info in filepath, so current working directory
+            self.filedir = "."
+            self.filename = filepath_args[0]
+        else:
+            self.filename = filepath_args[-1]
+            self.filedir = os.path.sep.join(filepath_args[:-1])
+
+    def create_entry(self, entry):
+        """    
+        Add or update an entry in TraceCalDB
+        Each entry has 10 values: Filepath, Date/Time of Obs., s1, s2, s3, s4, c0, c1, Echelle Position, X-Disperser Position
+        If s1, s2, s3, s4, c0, or c1 is True, then the 'True' fibers were used for the frame
+            
+        Args:
+            entry (TraceParams obj): entry to be added or updated in database
+        """
+        if not isinstance(entry, (TraceParams)):
+            raise ValueError("Entry needs to be instance of TraceParams")
+        
+        if "s1" in entry.labels:
+            s1_val = True
+        else:
+            s1_val = False
+        
+        if "s2" in entry.labels:
+            s2_val = True
+        else:
+            s2_val = False
+
+        if "s3" in entry.labels:
+            s3_val = True
+        else:
+            s3_val = False
+        
+        if "s4" in entry.labels:
+            s4_val = True
+        else:
+            s4_val = False
+        
+        if "c0" in entry.labels:
+            c0_val = True
+        else:
+            c0_val = False
+
+        if "c1" in entry.labels:
+            c1_val = True
+        else:
+            c1_val = False
+
+        if entry.filepath in self.db.values:
+            row_index= self.db[self.db["Filepath"]==entry.filepath].index.values
+            self.db.loc[row_index,self.columns] = [entry.filepath, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]
+        else:
+            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
