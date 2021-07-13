@@ -393,7 +393,10 @@ def load_filelist(filelist,background_med_filename,persisbadpixmap_filename):
     # return cube,badpixcube,fiber_list,ny,nx
     return cube,badpixcube,ny,nx
 
-def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=30, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
+def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=None, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
+
+    if numthreads is None:
+        numthreads = mp.cpu_count()
 
     ##calculate traces, FWHM, stellar spec for each fibers
     # fiber,order,x,[y,yerr,FWHM,FHWMerr,flux,fluxerr],
@@ -407,6 +410,8 @@ def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=30, fitbackgro
     Norders = guess_params.locs.shape[1]
     Nchannels = guess_params.locs.shape[2]
     Ny = fiber_dataset.data.shape[-2]
+
+    pool = mp.Pool(processes=numthreads)
 
 
     trace_calib = np.zeros((num_fibers, Norders, Nchannels, 5))
@@ -426,8 +431,6 @@ def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=30, fitbackgro
         badpix = np.ones(fib_badpixcube.shape[1::])
         badpix[np.where(np.nansum(fib_badpixcube,axis=0)<np.min([3,fib_badpixcube.shape[0]]))] = np.nan
 
-
-        pool = mp.Pool(processes=numthreads)
 
         for order_id, order_locs in enumerate(guess_params.locs[fiber_num]):
             y1 = int(order_locs[0])
