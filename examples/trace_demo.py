@@ -11,6 +11,7 @@ import astropy.io.fits as pyfits
 import kpicdrp.extraction as extraction
 import kpicdrp.utils as utils
 import kpicdrp.data as data
+from kpicdrp.caldb import DetectorCalDB
 
 try:
     import mkl
@@ -22,16 +23,22 @@ except:
 kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
 kpicpublicdir = "../public_kpic_data"
 
-# master background and bad pix directory.
-mybkgdir = os.path.join(kpicpublicdir,"20200928_backgrounds","calib")
-# mybkgdir = ""
-background_med_filename = os.path.join(mybkgdir,"20200928_background_med_nobars_tint4.42584_coadds1.fits")
-persisbadpixmap_filename = os.path.join(mybkgdir,"20200928_persistent_badpix_nobars_tint4.42584_coadds1.fits")
-
 # List of raw files for the derivation of the trace
 raw_data_dir = os.path.join(kpicpublicdir,"20200928_zet_Aql","raw") # the star of interest
 # raw_data_dir = ""
 filelist = glob(os.path.join(raw_data_dir, "*.fits"))
+
+# Path to DetectorCalDB that holds calibration files to use
+detcaldbpath = "/fill/in/your/path/to/DetectorCalDB"
+detcaldb = DetectorCalDB(filepath=detcaldbpath)
+
+# master background and bad pix directory
+detframe = data.DetectorFrame(filepath=filelist[0]) # uses first file in filelist
+background_med_file = detcaldb.get_calib(detframe, type="Background")
+background_med_filename = background_med_file.filepath
+persisbadpixmap_file = detcaldb.get_calib(detframe, type="BadPixelMap")
+persisbadpixmap_filename = persisbadpixmap_file.filepath
+
 
 # Set output directory
 out_trace_dir = os.path.join(kpicpublicdir,"20200928_zet_Aql","calib")
