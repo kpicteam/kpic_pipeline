@@ -147,32 +147,38 @@ class DetectorCalDB(CalDB):
         Args:
             file (DetectorFrame object): raw data file to be calibrated
             type (str): "Background" or "BadPixelMap"
+        
+        Fields:
+            calibdf (pd dataframe): database that holds all badpixmap or all background frames
+            options (pd dataframe): database that holds all files that could be used for calibration (same ame Integration Time, Coadds and >1 # of Files Used)
         """
         self.type = type
 
         if self.type == "BadPixelMap":
             self.calibdf = self.db[self.db["Type"]=="badpixmap"]
             self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]) & (self.calibdf["# of Files Used"] > 1))]
-            self.options["Date/Time of Obs."]=pd.to_datetime(self.options["Date/Time of Obs."])
-            MJD_time = Time(self.options["Date/Time of Obs."]).mjd
+            options = self.options.copy()
+            options["Date/Time of Obs."]=pd.to_datetime(options["Date/Time of Obs."])
+            MJD_time = Time(options["Date/Time of Obs."]).mjd
                  
             file_time = Time(file.time_obs).mjd
 
             result_index = np.abs(MJD_time-file_time).argmin() 
-            calib_filepath = self.options.iloc[result_index,0]
+            calib_filepath = options.iloc[result_index,0]
 
             return BadPixelMap(filepath=calib_filepath)
 
         elif self.type == "Background":
             self.calibdf = self.db[self.db["Type"]=="bkgd"]
             self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]) & (self.calibdf["# of Files Used"] > 1))]
-            self.options["Date/Time of Obs."]=pd.to_datetime(self.options["Date/Time of Obs."])
-            MJD_time = Time(self.options["Date/Time of Obs."]).mjd
+            options = self.options.copy()
+            options["Date/Time of Obs."]=pd.to_datetime(options["Date/Time of Obs."])
+            MJD_time = Time(options["Date/Time of Obs."]).mjd
                  
             file_time = Time(file.time_obs).mjd
 
             result_index = np.abs(MJD_time-file_time).argmin() 
-            calib_filepath = self.options.iloc[result_index,0]
+            calib_filepath = options.iloc[result_index,0]
 
             return Background(filepath=calib_filepath)
 
