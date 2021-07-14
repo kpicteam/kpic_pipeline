@@ -485,8 +485,8 @@ def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=None, fitbackg
         # print('trace_calib[fiber_num]',trace_calib[fiber_num])
         # print('residuals[fiber_num]',residuals[fiber_num])
 
-        pool.close()
-        pool.join()
+    pool.close()
+    pool.join()
     
     # The dimensions of trace calib are (4 fibers, 9 orders, 2048 pixels, 5) #[A, w, y0, rn, B]
     # trace_calib[:,:,:,0]: amplitude of the 1D gaussian
