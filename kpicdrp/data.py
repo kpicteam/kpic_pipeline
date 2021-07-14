@@ -303,12 +303,13 @@ class TraceParams(BasicData):
             self.labels = labels
 
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filename=None, filedir=None, caldb=None): 
         """
         Save file to disk with user specified filepath
 
         Args:
             filename (str): filepath to save to. Use self.filename if not specified
+            caldb (TraceCalDB object): if specified, calibration database to keep track of traces
         """
         self.header['ISCALIB'] = True
         self.header['CALIBTYP'] = "TraceParams"
@@ -331,6 +332,11 @@ class TraceParams(BasicData):
         hdulist.append(exthdu1)
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
+
+        if caldb is not None:
+            self.caldb = caldb
+            self.caldb.create_entry(self)
+            self.caldb.save()
 
     def copy(self):
         """
