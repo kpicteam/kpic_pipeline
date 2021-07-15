@@ -11,7 +11,7 @@ import astropy.io.fits as pyfits
 import kpicdrp.extraction as extraction
 import kpicdrp.utils as utils
 import kpicdrp.data as data
-from kpicdrp.caldb import DetectorCalDB
+from kpicdrp.caldb import DetectorCalDB, TraceCalDB
 
 try:
     import mkl
@@ -31,6 +31,10 @@ filelist = glob(os.path.join(raw_data_dir, "*.fits"))
 # Path to DetectorCalDB that holds calibration files to use
 detcaldbpath = "/fill/in/your/path/to/DetectorCalDB"
 detcaldb = DetectorCalDB(filepath=detcaldbpath)
+
+#Path to TraceCalDB to save trace files to
+tracecaldbpath = "/fill/in/your/path/to/TraceCalDB"
+tracecaldb = TraceCalDB(filepath=tracecaldbpath)
 
 # master background and bad pix directory
 detframe = data.DetectorFrame(filepath=filelist[0]) # uses first file in filelist
@@ -118,7 +122,7 @@ trace_calib = trace.fit_trace(cleaned_data, guess_fibers_params, fiber_list, num
 # Smooth the trace calibrations different ways, with polyfit or with spline. Only using the spline smoothing.
 _,smooth_trace_calib = trace.smooth(trace_calib)
 
-smooth_trace_calib.save(filedir=out_trace_dir, filename=os.path.basename(filelist[0]).replace(".fits","_trace.fits"))
+smooth_trace_calib.save(filedir=out_trace_dir, filename=os.path.basename(filelist[0]).replace(".fits","_trace.fits"), caldb=tracecaldb)
 
 if 1:  # plot
     # hdulist = pyfits.open(outfilename)
