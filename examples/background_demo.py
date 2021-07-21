@@ -12,7 +12,6 @@ from kpicdrp.caldb import det_caldb
 
 # For multiple tint and coadds in one folder
 kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
-kpicpublicdir = "../public_kpic_data" # main data dir
 bkgddir = os.path.join(kpicpublicdir,"20200928_backgrounds") # background frames
 save_loc =os.path.join(bkgddir,"calib")
 # Create output directory if it does not exist.
