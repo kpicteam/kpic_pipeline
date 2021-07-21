@@ -1,5 +1,3 @@
-from kpicdrp.trace import trace
-from astropy.io.fits import file
 import pandas as pd
 import os
 import configparser
@@ -59,11 +57,11 @@ class CalDB():
         Args:
             entry(BasicData obj): entry to add or update
         """
-        if entry.filepath in self.db.values:
-            row_index = self.db[self.db["Filepath"]== entry.filepath].index.values
-            self.db.loc[row_index,self.columns] = [entry.filepath, entry.type, entry.time_obs]
+        if os.path.abspath(entry.filepath) in self.db.values:
+            row_index = self.db[self.db["Filepath"]== os.path.abspath(entry.filepath)].index.values
+            self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.type, entry.time_obs]
         else:
-            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.type, entry.time_obs]], columns = self.columns), ignore_index = True)
+            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs]], columns = self.columns), ignore_index = True)
 
 
     def remove_entry(self, entry):
@@ -74,8 +72,8 @@ class CalDB():
         Args:
             entry(BasicData obj): entry to remove
         """
-        if entry.filepath in self.db.values:
-            entry_index = self.db[self.db["Filepath"]==entry.filepath].index.values
+        if os.path.abspath(entry.filepath) in self.db.values:
+            entry_index = self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
             self.db = self.db.drop(self.db.index[entry_index])
             self.db = self.db.reset_index(drop=True)
         else:
@@ -139,11 +137,11 @@ class DetectorCalDB(CalDB):
         if not isinstance(entry, (Background,BadPixelMap)):
             raise ValueError("Entry needs to be instance of Background or Bad Pixel Map")
     
-        if entry.filepath in self.db.values:
-            row_index= self.db[self.db["Filepath"]==entry.filepath].index.values
-            self.db.loc[row_index,self.columns] = [entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]
+        if os.path.abspath(entry.filepath) in self.db.values:
+            row_index= self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
+            self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]], columns = self.columns), ignore_index = True)
+            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]], columns = self.columns), ignore_index = True)
 
     def get_calib(self, file, type=""):
         """
@@ -261,11 +259,11 @@ class TraceCalDB(CalDB):
         else:
             c1_val = False
 
-        if entry.filepath in self.db.values:
-            row_index= self.db[self.db["Filepath"]==entry.filepath].index.values
-            self.db.loc[row_index,self.columns] = [entry.filepath, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]
+        if os.path.abspath(entry.filepath) in self.db.values:
+            row_index= self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
+            self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
+            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
 
 
 
