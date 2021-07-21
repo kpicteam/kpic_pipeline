@@ -11,7 +11,7 @@ import astropy.io.fits as pyfits
 import kpicdrp.extraction as extraction
 import kpicdrp.utils as utils
 import kpicdrp.data as data
-from kpicdrp.caldb import DetectorCalDB, TraceCalDB
+from kpicdrp.caldb import det_caldb, trace_caldb
 
 try:
     import mkl
@@ -28,19 +28,11 @@ raw_data_dir = os.path.join(kpicpublicdir,"20200928_zet_Aql","raw") # the star o
 # raw_data_dir = ""
 filelist = glob(os.path.join(raw_data_dir, "*.fits"))
 
-# Path to DetectorCalDB that holds calibration files to use
-detcaldbpath = "/fill/in/your/path/to/DetectorCalDB"
-detcaldb = DetectorCalDB(filepath=detcaldbpath)
-
-#Path to TraceCalDB to save trace files to
-tracecaldbpath = "/fill/in/your/path/to/TraceCalDB"
-tracecaldb = TraceCalDB(filepath=tracecaldbpath)
-
 # master background and bad pix directory
 detframe = data.DetectorFrame(filepath=filelist[0]) # uses first file in filelist
-background_med_file = detcaldb.get_calib(detframe, type="Background")
+background_med_file = det_caldb.get_calib(detframe, type="Background")
 background_med_filename = background_med_file.filepath
-persisbadpixmap_file = detcaldb.get_calib(detframe, type="BadPixelMap")
+persisbadpixmap_file = det_caldb.get_calib(detframe, type="BadPixelMap")
 persisbadpixmap_filename = persisbadpixmap_file.filepath
 
 
@@ -57,8 +49,6 @@ make_guess = True
 N_order = 9
 # Set number of threads to be used
 numthreads = 4
-
-#///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 # read in the raw data
 input_data = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)

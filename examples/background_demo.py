@@ -8,6 +8,7 @@ import kpicdrp.background as background
 from kpicdrp.data import Dataset, DetectorFrame
 import matplotlib.pyplot as plt
 import numpy as np
+from kpicdrp.caldb import det_caldb
 
 # For multiple tint and coadds in one folder
 kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
@@ -27,7 +28,7 @@ raw_dataset = Dataset(filelist=filelist, dtype=DetectorFrame)
 
 # For multiple tint and coadds in one folder
 # It will save the master backgrounds and bad pixel maps to bkgddir.
-master_bkgds, badpixmaps, unique_tint, unique_coadds = background.process_backgrounds(raw_dataset, save_loc=save_loc, fileprefix=bkgd_fileprefix)
+master_bkgds, badpixmaps, unique_tint, unique_coadds = background.process_backgrounds(raw_dataset, save_loc=save_loc, fileprefix=bkgd_fileprefix, caldb_save_loc=det_caldb)
 
 # Plot the resulting master backgrounds and bad pixels
 plt.figure(1)

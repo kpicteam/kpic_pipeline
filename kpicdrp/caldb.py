@@ -1,8 +1,13 @@
+from kpicdrp.trace import trace
+from astropy.io.fits import file
 import pandas as pd
 import os
+import configparser
+import pathlib
 from astropy.time import Time
 import numpy as np
 from kpicdrp.data import BadPixelMap, Background, TraceParams
+
 
 class CalDB():
     """
@@ -261,3 +266,45 @@ class TraceCalDB(CalDB):
             self.db.loc[row_index,self.columns] = [entry.filepath, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]
         else:
             self.db = self.db.append(pd.DataFrame([[entry.filepath, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
+
+
+
+
+# load ca
+def load_caldb_fromdisk():
+    """
+    Reads in calibration databases from disk. Creates them if they don't exist.
+    
+    Returns:
+        A tuple of CalDB objects in the following order:
+        * `det_db`: background and badpixelmap caldb for detector frames
+        * `trace_db`: trace params caldb
+    """
+
+    # load in default caldbs based on configuration file
+    homedir = pathlib.Path.home()
+    config_filepath = os.path.join(homedir, ".kpicdrp")
+    config = configparser.ConfigParser()
+    config.read(config_filepath)
+    caldb_path = config.get("PATH", "caldb")
+
+    #### create the CalDBs if they don't exist
+    # backgrounds/bpmap caldb
+    detdb_filepath = os.path.join(caldb_path, "caldb_detector.csv")
+    if not os.path.exists(detdb_filepath):
+        det_db = DetectorCalDB()
+        det_db.save(filedir=caldb_path, filename="caldb_detector.csv")
+    else:
+        det_db = DetectorCalDB(filepath=detdb_filepath)
+
+    # trace params caldb
+    tracedb_filepath = os.path.join(caldb_path, "caldb_traces.csv")
+    if not os.path.exists(tracedb_filepath):
+        trace_db = TraceCalDB()
+        trace_db.save(filedir=caldb_path, filename="caldb_traces.csv")
+    else:
+        trace_db = TraceCalDB(filepath=tracedb_filepath)
+
+    return det_db, trace_db
+    
+det_caldb, trace_caldb = load_caldb_fromdisk()

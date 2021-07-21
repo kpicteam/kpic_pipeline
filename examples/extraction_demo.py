@@ -60,7 +60,7 @@ traces_with_bkgds = trace.get_background_traces(trace_dat)
 # trace_flags = np.array([0, ] * trace_loc.shape[0] + [1, ] * trace_loc.shape[0] + [2, ] * trace_loc.shape[0])
 
 raw_sci_dataset = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
-sci_dataset = extraction.process_sci_raw2d(filelist, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=False)
+sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=False)
 
 for filename,dat,header in zip(filelist,sci_frames,sci_hdrs):
     out_filename = os.path.join(out_flux_dir, os.path.basename(filename).replace(".fits", "_fluxes.fits"))
