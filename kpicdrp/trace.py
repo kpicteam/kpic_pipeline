@@ -393,7 +393,15 @@ def load_filelist(filelist,background_med_filename,persisbadpixmap_filename):
     # return cube,badpixcube,fiber_list,ny,nx
     return cube,badpixcube,ny,nx
 
-def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=None, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
+def fit_trace(fiber_dataset, guess_params, fiber_list=None, numthreads=None, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
+
+    if fiber_list is None:
+        # Identify which fibers was observed in each file
+        fiber_list = []
+        for frame in fiber_dataset:
+            fiber_list.append(guess_star_fiber(frame.data, guess_params))
+
+    fiber_list = np.array(fiber_list)
 
     if numthreads is None:
         numthreads = mp.cpu_count()
@@ -401,8 +409,6 @@ def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=None, fitbackg
     ##calculate traces, FWHM, stellar spec for each fibers
     # fiber,order,x,[y,yerr,FWHM,FHWMerr,flux,fluxerr],
     num_fibers = len(guess_params.labels)
-
-    fiber_list = np.array(fiber_list)
 
     badpixcube = np.ones(fiber_dataset.data.shape)
     badpixcube[np.isnan(fiber_dataset.data)] == np.nan
