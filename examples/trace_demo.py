@@ -46,19 +46,8 @@ numthreads = 4
 input_data = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
 
 # master background and bad pix directory
-background_med_file = det_caldb.get_calib(input_data[0], type="Background")
-background_med_filename = background_med_file.filepath
-persisbadpixmap_file = det_caldb.get_calib(input_data[0], type="BadPixelMap")
-persisbadpixmap_filename = persisbadpixmap_file.filepath
-
-# read the master Background file
-bkgd = data.Background(filepath=background_med_filename)
-# read the bad pixel map
-badpixmap = data.BadPixelMap(filepath=persisbadpixmap_filename)
-
-# todo, ask JB why we need this
-badpixcube = np.tile(badpixmap.data[None,:,:],(len(filelist),1,1))
-
+bkgd = det_caldb.get_calib(input_data[0], type="Background")
+badpixmap = det_caldb.get_calib(input_data[0], type="BadPixelMap")
 
 # Read the raw detector images into a cube while subtracting background
 cleaned_data = extraction.process_sci_raw2d(input_data, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=False)
