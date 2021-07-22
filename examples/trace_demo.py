@@ -84,7 +84,10 @@ else:
 trace_calib = trace.fit_trace(cleaned_data, guess_fibers_params, numthreads=numthreads, fitbackground=False)
 
 # Smooth the trace calibrations different ways, with polyfit or with spline. Only using the spline smoothing.
-_,smooth_trace_calib = trace.smooth(trace_calib)
+smooth_trace_calib = trace.smooth(trace_calib)
+
+# add background and dark current traces to sample the noise (optional)
+smooth_trace_calib = trace.add_background_traces(smooth_trace_calib)
 
 smooth_trace_calib.save(filedir=out_trace_dir, filename=os.path.basename(filelist[0]).replace(".fits","_trace.fits"), caldb=trace_caldb)
 

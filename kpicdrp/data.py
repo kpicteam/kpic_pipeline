@@ -303,8 +303,8 @@ class TraceParams(BasicData):
     def __init__(self, locs=None, widths=None, labels=None, header=None, filepath=""):
         if locs is None and widths is None and labels is None and header is None:
             super().__init__(filepath=filepath) # read in file from disk
-            self.locs = self.data
-            self.widths = self.extdata[0]
+            self.widths = self.data
+            self.locs = self.extdata[0]
             
             self.labels = []
             num_fibs = self.locs.shape[0]
@@ -353,9 +353,9 @@ class TraceParams(BasicData):
         filepath = os.path.join(self.filedir, self.filename)
 
         hdulist = fits.HDUList()
-        hdu = fits.PrimaryHDU(data=self.locs, header=self.header)
+        hdu = fits.PrimaryHDU(data=self.widths, header=self.header)
         hdulist.append(hdu)
-        exthdu1 = fits.ImageHDU(data=self.widths)
+        exthdu1 = fits.ImageHDU(data=self.locs)
         hdulist.append(exthdu1)
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
