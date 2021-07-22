@@ -21,20 +21,11 @@ except:
 
 # Public KPIC google drive
 kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
-kpicpublicdir = "../public_kpic_data"
 
 # List of raw files for the derivation of the trace
 raw_data_dir = os.path.join(kpicpublicdir,"20200928_zet_Aql","raw") # the star of interest
 # raw_data_dir = ""
 filelist = glob(os.path.join(raw_data_dir, "*.fits"))
-
-# master background and bad pix directory
-detframe = data.DetectorFrame(filepath=filelist[0]) # uses first file in filelist
-background_med_file = det_caldb.get_calib(detframe, type="Background")
-background_med_filename = background_med_file.filepath
-persisbadpixmap_file = det_caldb.get_calib(detframe, type="BadPixelMap")
-persisbadpixmap_filename = persisbadpixmap_file.filepath
-
 
 # Set output directory
 out_trace_dir = os.path.join(kpicpublicdir,"20200928_zet_Aql","calib")
@@ -42,6 +33,7 @@ outfilename = os.path.join(out_trace_dir,os.path.basename(filelist[0]).replace("
 # out_trace_dir = ""
 if not os.path.exists(os.path.join(out_trace_dir)):
     os.makedirs(os.path.join(out_trace_dir))
+
 
 # If True, it automatically derives a first guess for the traces location using kpicdrp.trace.fibers_guess() using
 # some peak fitting routine.
@@ -53,16 +45,9 @@ numthreads = 4
 # read in the raw data
 input_data = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
 
-
-# read the master Background file
-bkgd = data.Background(filepath=background_med_filename)
-# read the bad pixel map
-badpixmap = data.BadPixelMap(filepath=persisbadpixmap_filename)
-
-# todo, ask JB why we need this
-badpixcube = np.tile(badpixmap.data[None,:,:],(len(filelist),1,1))
-
-
+# master background and bad pix directory
+bkgd = det_caldb.get_calib(input_data[0], type="Background")
+badpixmap = det_caldb.get_calib(input_data[0], type="BadPixelMap")
 
 # Read the raw detector images into a cube while subtracting background
 cleaned_data = extraction.process_sci_raw2d(input_data, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=False)
@@ -95,24 +80,13 @@ else:
     guess_fibers_params = data.TraceParams(locs=guess_locs, widths=guess_widths, labels=guess_labels, header=cleaned_data[0].header)
     
 
-# Identify which fibers was observed in each file
-fiber_list = []
-for frame in cleaned_data:
-    fiber_list.append(trace.guess_star_fiber(frame.data, guess_fibers_params))
-
 # Calibrate the trace position and width
-trace_calib = trace.fit_trace(cleaned_data, guess_fibers_params, fiber_list, numthreads=numthreads, fitbackground=False)
-# The dimensions of trace calib are (4 fibers, 9 orders, 2048 pixels, 5) #[A, w, y0, rn, B]
-# trace_calib[:,:,:,0]: amplitude of the 1D gaussian
-# trace_calib[:,:,:,1]: trace width (1D gaussian sigma)
-# trace_calib[:,:,:,2]: trace y-position
-# trace_calib[:,:,:,3]: noise (ignore)
-# trace_calib[:,:,:,4]: background (ignore)
+trace_calib = trace.fit_trace(cleaned_data, guess_fibers_params, numthreads=numthreads, fitbackground=False)
 
 # Smooth the trace calibrations different ways, with polyfit or with spline. Only using the spline smoothing.
 _,smooth_trace_calib = trace.smooth(trace_calib)
 
-smooth_trace_calib.save(filedir=out_trace_dir, filename=os.path.basename(filelist[0]).replace(".fits","_trace.fits"), caldb=tracecaldb)
+smooth_trace_calib.save(filedir=out_trace_dir, filename=os.path.basename(filelist[0]).replace(".fits","_trace.fits"), caldb=trace_caldb)
 
 if 1:  # plot
     # hdulist = pyfits.open(outfilename)

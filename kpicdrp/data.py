@@ -278,6 +278,25 @@ class BadPixelMap(DetectorFrame):
 class TraceParams(BasicData):
     """
     Location and widths of fiber traces on the NIRSPEC detector
+
+    Args:
+        locs (np.array): location of traces on detector (N_fibers, N_orders, N_x)
+        widths(np.array): standard deviation of Gaussian profile of traces (N_fibers, N_orders, N_x)
+        labels (list of str): labels for each fiber. See `labels` attribute below for details of how labels are defined
+        header: FITS header for file
+        filepath (str): filepath to read the calibration file from, if applicable
+
+    Attributes: 
+        locs (np.array): location of traces on detector (N_fibers, N_orders, N_x)
+        widths (np.array): standard deviation of Gaussian profile of traces (N_fibers, N_orders, N_x)
+        labels (list of str): labels for each fiber. Each label consists of a character and a number (e.g., 's3')
+                                Characters represent the type of fiber, and numbers denote which fiber of that type.
+                                A typical label list looks like ['s1', 's2', 's3', 'b1', 'b2', 'b3', 'd1', 'd2']
+                                Types of fibers currently defined:
+                                    * `s`: science fibers, where we actually get data from the sky
+                                    * `b`: background fibers, where we sample the thermal background of the slit
+                                    * `d`: dark current fibers, where we sample the counts outside the slit
+                                    * `c`: calibration fibers, containing light from calibration sources
     """
     type = "trace"
 
@@ -302,6 +321,14 @@ class TraceParams(BasicData):
             self.widths = widths
             self.labels = labels
 
+    def get_sci_indices(self):
+        """
+        Returns the indices corresponding to just the scinece fibers
+
+        Return:
+            list of int: indices correspond to the fibers that are science fibers. 
+        """
+        return [i for i,val in enumerate(self.labels) if 's' in val]
 
     def save(self, filename=None, filedir=None, caldb=None): 
         """

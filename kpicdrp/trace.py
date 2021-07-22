@@ -301,13 +301,16 @@ def smooth(trace_calib):
     return polyfit_trace_calib,smooth_trace_calib
 
 def guess_star_fiber(image, fiber_params):
-    # fibers is a dict wih 0, 1, 2, 3... and for each x1 and x2
-    # fiber1=None
-    # fiber2=None
-    # fiber3=None
-    # fiber4=None
+    """
+    Guess which fiber the corresponding data of a *bright* star is taken in
 
-    # dictionary... length of... num of fibes
+    Args:
+        image (data.DetectorFrame): a 2D image with a single stellar trace
+        fiber_params (data.TraceParams): trace calibration file to use to identify fiber traces
+
+    Returns:
+        str: label corresponding to the fiber numer in fiber_params.label for this image
+    """
 
     fiber_templates = []
     fiber_label = fiber_params.labels
@@ -350,59 +353,33 @@ def guess_star_fiber(image, fiber_params):
     return fiber_label[np.argmax(flat_ftemps)]
 
 
-def load_filelist(filelist,background_med_filename,persisbadpixmap_filename):
-    hdulist = pyfits.open(background_med_filename)
-    background = hdulist[0].data
-    background_header = hdulist[0].header
-    tint = int(background_header["ITIME"])
 
-    hdulist = pyfits.open(persisbadpixmap_filename)
-    persisbadpixmap = hdulist[0].data
-    persisbadpixmap_header = hdulist[0].header
-    ny,nx = persisbadpixmap.shape
+def fit_trace(fiber_dataset, guess_params, fiber_list=None, numthreads=None, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
+    """
+    Fits the trace location and width to a dataset containing a bright signal on individual fibers
 
-    im_list = []
-    badpixmap_list = []
-    # fiber_list = []
-    header_list = []
+    Args:
+        fiber_dataset (data.Dataset): dataset of DetectorFrames to calibrate the fiber traces with
+        guess_params (data.TraceParams): guess trace params or a previous calibrated trace params file
+        fiber list (list of str): if not None, a list of fiber labels for each frame. Otherwise, the code will guess it
+        numthreads (int): How many processes to parallelize this with. By default it uses all available processors
+        fitbackground (bool): if True, fits for a background level when also fitting the trace profile
+        return_residuals (bool): if True, also returns the residuals to the fits (defualt False)
+        add_bkgd_traces (bool): if True, automatically guesses trace locations to sample the slit and dark current background (default True)
+    """
+    if fiber_list is None:
+        # Identify which fibers was observed in each file
+        fiber_list = []
+        for frame in fiber_dataset:
+            fiber_list.append(guess_star_fiber(frame.data, guess_params))
 
-    for filename in filelist:
-        print(filename)
-        hdulist = pyfits.open(filename)
-        im = hdulist[0].data.T[:,::-1]
-        header = hdulist[0].header
-        header_list.append(header)
-        if tint != int(header["ITIME"]):
-            raise Exception("bad tint {0}, should be {1}: ".format(int(header["ITIME"]),tint) + filename)
-        hdulist.close()
-
-        im_skysub = im-background
-        badpixmap = persisbadpixmap#*get_badpixmap_from_laplacian(im_skysub,bad_pixel_fraction=1e-2)
-
-        # plt.imshow(im_skysub*badpixmap,interpolation="nearest",origin="lower")
-        # plt.show()
-
-        im_list.append(im_skysub)
-        badpixmap_list.append(badpixmap)
-        # fiber_list.append(guess_star_fiber(im_skysub*badpixmap,fibers))
-    cube = np.array(im_list)
-    badpixcube = np.array(badpixmap_list)
-    # fiber_list = np.array(fiber_list)
-    # print(fiber_list)
-
-    # return cube,badpixcube,fiber_list,ny,nx
-    return cube,badpixcube,ny,nx
-
-def fit_trace(fiber_dataset, guess_params, fiber_list, numthreads=None, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
+    fiber_list = np.array(fiber_list)
 
     if numthreads is None:
         numthreads = mp.cpu_count()
 
-    ##calculate traces, FWHM, stellar spec for each fibers
-    # fiber,order,x,[y,yerr,FWHM,FHWMerr,flux,fluxerr],
-    num_fibers = len(guess_params.labels)
-
-    fiber_list = np.array(fiber_list)
+    # get how many science fibers there are
+    num_fibers = len(guess_params.get_sci_indices())
 
     badpixcube = np.ones(fiber_dataset.data.shape)
     badpixcube[np.isnan(fiber_dataset.data)] == np.nan
