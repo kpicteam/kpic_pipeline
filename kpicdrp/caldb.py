@@ -145,15 +145,15 @@ class DetectorCalDB(CalDB):
 
     def get_calib(self, file, type=""):
         """
-        Outputs the best calibration file (same Integration Time and Coadds, >1 # of Files Used, and then searches for the most similar time) to use when a raw file is inputted
+        Outputs the best background or bad pixel map calibration file (same Integration Time and Coadds, >1 # of Files Used, and then searches for the most similar time) to use when a raw file is inputted
 
         Args:
-            file (DetectorFrame object): raw data file to be calibrated
+            file (DetectorFrame object): raw data file to get calibration for
             type (str): "Background" or "BadPixelMap"
         
         Fields:
             calibdf (pd dataframe): database that holds all badpixmap or all background frames
-            options (pd dataframe): database that holds all files that could be used for calibration (same ame Integration Time, Coadds and >1 # of Files Used)
+            options (pd dataframe): database that holds all files that could be used for calibration (same Integration Time, Coadds and >1 # of Files Used)
         """
         self.type = type
 
@@ -265,7 +265,24 @@ class TraceCalDB(CalDB):
         else:
             self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
 
+    def get_calib(self, file):
+        """
+        Outputs the best calibration trace file (same Echelle Position and X-Disperser Position, then searches for the most similar time) to use when a raw file is inputted
 
+        Args:
+            file (DetectorFrame object): raw data file to get calibration for
+        """
+        self.options = self.db.loc[((self.db["Echelle Position"] == file.header["ECHLPOS"]) & (self.db["X-Disperser Position"] == file.header["DISPPOS"]))]
+        options = self.options.copy()
+        options["Date/Time of Obs."]=pd.to_datetime(options["Date/Time of Obs."])
+        MJD_time = Time(options["Date/Time of Obs."]).mjd
+                 
+        file_time = Time(file.time_obs).mjd
+
+        result_index = np.abs(MJD_time-file_time).argmin() 
+        calib_filepath = options.iloc[result_index,0]
+
+        return TraceParams(filepath=calib_filepath)
 
 
 # load ca
