@@ -213,7 +213,7 @@ def fibers_guess(fiber_dataset, N_order=9):
 
 # ----
 
-def trace(vec,x):
+def _smoothing(vec,x):
     # vec = trace_calib[fiber_num,order_id, :, para_id]
     vec_cp = copy(vec)
 
@@ -276,6 +276,15 @@ def trace(vec,x):
     return polyfit_trace_calib,smooth_trace_calib
 
 def smooth(trace_calib):
+    """
+    Smooths the trace positions and widths using a spline 
+
+    Args:
+        trace_calib (data.TraceParams): input trace calibration to smooth
+
+    Returns:
+        data.TraceParams: smooothed trace calibration
+    """
     print('trace_calib',trace_calib)
     polyfit_trace_calib = trace_calib.copy() 
     smooth_trace_calib = trace_calib.copy()
@@ -285,12 +294,12 @@ def smooth(trace_calib):
         for order_id in range(trace_calib.data.shape[1]):
 
             vec = trace_calib.locs[fiber_num, order_id]
-            poly, smoothed = trace(vec,x)
+            poly, smoothed = _smoothing(vec,x)
             polyfit_trace_calib.locs[fiber_num, order_id] = poly
             smooth_trace_calib.locs[fiber_num, order_id] = smoothed
 
             vec = trace_calib.widths[fiber_num, order_id]
-            poly, smoothed = trace(vec,x)
+            poly, smoothed = _smoothing(vec,x)
             polyfit_trace_calib.widths[fiber_num, order_id] = poly
             smooth_trace_calib.widths[fiber_num, order_id] = smoothed
 
@@ -298,7 +307,7 @@ def smooth(trace_calib):
     trace_calib.header['HISTORY'] = "[{0}] Fiber params smoothed".format(str(tnow))
 
 
-    return polyfit_trace_calib,smooth_trace_calib
+    return smooth_trace_calib
 
 def guess_star_fiber(image, fiber_params):
     """
@@ -354,7 +363,7 @@ def guess_star_fiber(image, fiber_params):
 
 
 
-def fit_trace(fiber_dataset, guess_params, fiber_list=None, numthreads=None, fitbackground=False, return_residuals=False, add_bkgd_traces=True):
+def fit_trace(fiber_dataset, guess_params, fiber_list=None, numthreads=None, fitbackground=False, return_residuals=False):
     """
     Fits the trace location and width to a dataset containing a bright signal on individual fibers
 
@@ -480,9 +489,6 @@ def fit_trace(fiber_dataset, guess_params, fiber_list=None, numthreads=None, fit
     tnow = time.Time.now()
     trace_params.header['HISTORY'] = "[{0}] Fit {1} fiber traces in {2} orders".format(str(tnow), num_fibers, Norders)
 
-    if add_bkgd_traces:
-        trace_params = add_background_traces(trace_params)
-
     if return_residuals:
         return trace_params, residuals
     else:
@@ -503,8 +509,8 @@ def add_background_traces(trace_dat):
     """
     new_trace_dat = trace_dat.copy()
 
-    trace_loc_slit = np.zeros((new_trace_dat.locs.shape[0], new_trace_dat.locs.shape[1], new_trace_dat.locs.shape[2]))
-    trace_loc_dark = np.zeros((new_trace_dat.locs.shape[0], new_trace_dat.locs.shape[1], new_trace_dat.locs.shape[2]))
+    trace_loc_slit = np.zeros((trace_dat.locs.shape[0], trace_dat.locs.shape[1], trace_dat.locs.shape[2]))
+    trace_loc_dark = np.zeros((trace_dat.locs.shape[0], trace_dat.locs.shape[1], trace_dat.locs.shape[2]))
 
     for order_id in range(new_trace_dat.locs.shape[1]):
         dy1 = np.nanmean(new_trace_dat.locs[0, order_id, :] - new_trace_dat.locs[1, order_id, :]) / 2
@@ -527,11 +533,11 @@ def add_background_traces(trace_dat):
     # add slit and dark traces to trace params
     # first the slit backgrounds
     new_trace_dat.locs = np.append(new_trace_dat.locs, trace_loc_slit, axis=0)
-    new_trace_dat.widths = np.append(new_trace_dat.widths, new_trace_dat.widths, axis=0)
+    new_trace_dat.widths = np.append(new_trace_dat.widths, trace_dat.widths, axis=0)
     new_trace_dat.labels = np.append(new_trace_dat.labels,  ['b{0}'.format(i) for i in range(trace_loc_slit.shape[0])])
     # next the traces
     new_trace_dat.locs = np.append(new_trace_dat.locs, trace_loc_dark, axis=0)
-    new_trace_dat.widths = np.append(new_trace_dat.widths, new_trace_dat.widths, axis=0)
+    new_trace_dat.widths = np.append(new_trace_dat.widths, trace_dat.widths, axis=0)
     new_trace_dat.labels = np.append(new_trace_dat.labels,  ['d{0}'.format(i) for i in range(trace_loc_slit.shape[0])])
 
 
