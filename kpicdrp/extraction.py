@@ -153,7 +153,7 @@ def extract_1d_box(dat_coords, dat_slice, center, sigma, noise):
     return flux, flux_err, flux_err_bkgd_only, max_res
 
 
-def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background, trace_flag, box=False):
+def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_background, sci_fibers, box=False):
     """
     Extracts the flux from a chunk of size Nx of an order for some given fibers
 
@@ -164,7 +164,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         img_noise: 2-D frame that describes the thermal/background noise in each pixel (Ny, Nx). if None, will try to compute this emperically
             The added Poisson noise from the signal is added to this noise map within the function so it should not be included in this input map.
         fit_background: if True, fit the background
-        trace_flag: numberical flags of length N_fibers length 
+        sci_fibers: index of fibers (up to N_fibers) that are science fibers 
 
     Returns:
         fluxes: (N_fibers, Nx) extracted 1-D fluxes
@@ -190,7 +190,6 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         img_column = image[:, x]
         centers = order_locs[:, x]
         bkgd_column = np.copy(img_column) # make a copy for masking the fibers
-        sci_fibers = np.where(trace_flag == 0)[0] # identify science fibers
         # for each science fiber, mask 11 pixels around it
         for center in centers[sci_fibers]:
             center_int = int(np.round(center))
@@ -213,6 +212,14 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
         for fiber in range(num_fibers):
             center = order_locs[fiber, x]
             sigma = order_widths[fiber, x]
+            # if either is nan, we can't do anything about the extraction. 
+            if (np.isnan(center)) or (np.isnan(sigma)):
+                fluxes[fiber, x] = np.nan
+                fluxerrs_extraction[fiber, x] = np.nan
+                fluxerrs_bkgd_only[fiber, x] = np.nan
+                fluxerrs_emperical[fiber, x] = np.nan
+                continue          
+
             center_int = int(np.round(center))
 
             # JX: when would this be nan? on bad pixels?
@@ -285,6 +292,7 @@ def extract_flux(dataset, trace_params, fit_background=False, bad_pixel_fraction
     """
 
     trace_flags = trace_params.labels
+    sci_fibers = trace_params.get_sci_indices()
     trace_widths = trace_params.widths
     trace_locs = trace_params.locs
     num_fibers = trace_locs.shape[0]
@@ -303,11 +311,11 @@ def extract_flux(dataset, trace_params, fit_background=False, bad_pixel_fraction
         # if img_noise is None:
         img_noise = np.zeros(image.shape) * np.nan
 
-        fluxes = np.zeros(order_locs.shape)+np.nan
-        fluxerrs_extraction = np.zeros(order_locs.shape)+np.nan
-        fluxerrs_bkgd_only = np.zeros(order_locs.shape)+np.nan
-        fluxerrs_emperical = np.zeros(order_locs.shape)+np.nan
-        badpixmetrics = np.zeros(order_locs.shape)+np.nan
+        fluxes = np.zeros(trace_locs.shape)+np.nan
+        fluxerrs_extraction = np.zeros(trace_locs.shape)+np.nan
+        fluxerrs_bkgd_only = np.zeros(trace_locs.shape)+np.nan
+        fluxerrs_emperical = np.zeros(trace_locs.shape)+np.nan
+        badpixmetrics = np.zeros(trace_locs.shape)+np.nan
 
         pool_jobs = [] # for multiprocessing.Pool if needed
 
@@ -326,14 +334,14 @@ def extract_flux(dataset, trace_params, fit_background=False, bad_pixel_fraction
 
                 if pool is None:
                     # extract flux from chunk
-                    outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, trace_flags, box=box)
+                    outputs = _extract_flux_chunk(img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, sci_fibers, box=box)
                     fluxes[:, order, c_start:c_end] = outputs[0]
                     fluxerrs_extraction[:, order, c_start:c_end] = outputs[1]
                     fluxerrs_bkgd_only[:, order, c_start:c_end] = outputs[2]
                     fluxerrs_emperical[:, order, c_start:c_end] = outputs[3]
                     badpixmetrics[:, order, c_start:c_end] = outputs[-1]
                 else:
-                    output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, trace_flags), dict(box=box))
+                    output = pool.apply_async(_extract_flux_chunk, (img_chunk, chunk_locs, chunk_widths, noise_chunk, fit_background, sci_fibers), dict(box=box))
                     pool_jobs.append((output, order, c_start, c_end))
 
         # for multiprocessing, need to retrieve outputs outputs
@@ -374,12 +382,13 @@ def extract_flux(dataset, trace_params, fit_background=False, bad_pixel_fraction
                 fluxerrs_emperical[fib, order][where_bad_pixels] = np.nan
 
 
-        fileprefix = frame.filename[:-5] + "_spec.fits"
+        fileprefix = frame.filename[:-5] + "_spectra.fits"
         filepath = os.path.join(frame.filedir, fileprefix)
-        this_spec = data.Spectrum(flux=fluxes, errs=fluxerrs_extraction, header=frame.header, filepath=filepath)
-        spectral_data.appaend(this_spec)
+        this_spec = data.Spectrum(fluxes=fluxes, errs=fluxerrs_extraction, header=frame.header, filepath=filepath)
+        spectral_data.append(this_spec)
 
-    
+    spectral_data = np.array(spectral_data)
+    spectral_dataset = data.Dataset(frames=spectral_data)
 
     # # save the data
     # if output_filename is not None:
@@ -392,7 +401,7 @@ def extract_flux(dataset, trace_params, fit_background=False, bad_pixel_fraction
     #     hdulist = fits.HDUList([prihdu, exthdu1, exthdu2, exthdu3,exthdu4])
     #     hdulist.writeto(output_filename, overwrite=True)
 
-    return fluxes, fluxerrs_extraction,fluxerrs_bkgd_only#,errors_emperical
+    return spectral_dataset
 
 
 
