@@ -15,7 +15,7 @@ import kpicdrp.data as data
 
 gain = 3.03 # e-/ADU
 
-def add_baryrv(header):
+def add_baryrv_to_header(header):
     """
     Add barycentric rv to fits headers of extracted frames
     copied from JB's extraction code
@@ -51,7 +51,7 @@ def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, scale=Tr
         new_data = np.copy(frame.data)
             
         if add_baryrv:
-            new_hdr = add_baryrv(new_hdr)
+            new_hdr = add_baryrv_to_header(new_hdr)
 
         if detect_cosmics:
             badpixmap4cosmic = np.zeros(badpixmap.data.shape)
@@ -384,7 +384,7 @@ def extract_flux(dataset, trace_params, fit_background=False, bad_pixel_fraction
 
         fileprefix = frame.filename[:-5] + "_spectra.fits"
         filepath = os.path.join(frame.filedir, fileprefix)
-        this_spec = data.Spectrum(fluxes=fluxes, errs=fluxerrs_extraction, header=frame.header, filepath=filepath)
+        this_spec = data.Spectrum(fluxes=fluxes, errs=fluxerrs_extraction, header=frame.header, filepath=filepath, labels=trace_params.labels)
         spectral_data.append(this_spec)
 
     spectral_data = np.array(spectral_data)

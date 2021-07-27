@@ -1,15 +1,15 @@
-import numpy as np
+import os
+from glob import glob
 from copy import copy
-import astropy.io.fits as fits
-from scipy.interpolate import interp1d
 import itertools
+import numpy as np
+from scipy.interpolate import interp1d, InterpolatedUnivariateSpline
+import astropy.io.fits as fits
 from astropy.coordinates import SkyCoord, EarthLocation
 import astropy.units as u
 import astropy.time as time
-from scipy.interpolate import InterpolatedUnivariateSpline
 import astropy.io.fits as pyfits
-import os
-from glob import glob
+import kpicdrp.data as data
 
 def get_spline_model(x_knots,x_samples,spline_degree=3):
     M = np.zeros((np.size(x_samples),(np.size(x_knots))))
@@ -125,42 +125,55 @@ def convolve_spectrum_line_width(wvs,spectrum,line_widths,mypool=None):
         return conv_spectrum
 
 
-def stellar_spectra_from_files(filelist):
+def stellar_spectra_from_files(dataset):
     """"
-    Combines star observations from a list of files.
+    Combines extracted stellar spectra from a sequence of observations of the star. 
     For a given fiber, it identifies the files where the star was observed on this particular fiber, and combines the
     corresponding spectra.
     The final output has the combined spectrum for each fiber.
 
     Args:
-        filelist: list of filenames
+        dataset (data.Dataset): a dataset of Spectrum data of the star on various fibers. 
     Returns:
-        combined_spec: (Nfibers Norders,Npix) Combined spectra
-        combined_err: (Nfibers Norders,Npix) Combined error
+        combined_spec: (Nfibers, Norders, Npix) Combined spectra [note that Nfibers only corresponds to fibers with the star]
+        combined_err: (Nfibers, Norders, Npix) Combined error
     """
     spec_list = []
     err_list = []
-    baryrv_list = []
-    for filename in filelist:
-        hdulist = fits.open(filename)
-        spec_list.append(hdulist[0].data[None,:,:,:])
-        err_list.append(hdulist[1].data[None,:,:,:])
-        baryrv_list.append(float(hdulist[0].header["BARYRV"]))
+    for frame in dataset:
+        spec_list.append(frame.fluxes[None,:,:,:])
+        err_list.append(frame.errs[None,:,:,:])
     all_spec_arr = np.concatenate(spec_list)
     all_err_arr = np.concatenate(err_list)
-    baryrv_list = np.array(baryrv_list)
+    baryrv_list = np.array(dataset.get_header_values('BARYRV'))
 
     whichfiber = np.argmax(np.nansum(all_spec_arr, axis=(2, 3)),axis=1)
+    unique_fibers = np.sort(np.unique(whichfiber)) # all fibers with starlight
 
     combined_spec = np.zeros(all_spec_arr.shape[1::])
     combined_err = np.zeros(all_spec_arr.shape[1::])
     baryrv = np.zeros(all_spec_arr.shape[1])
-    for fib in np.unique(whichfiber):
+    for fib in unique_fibers:
         spec_list = all_spec_arr[np.where(fib == whichfiber)[0], fib, :, :]
         spec_sig_list = all_err_arr[np.where(fib == whichfiber)[0], fib, :, :]
         baryrv[fib] = np.mean(baryrv_list[np.where(fib == whichfiber)[0]])
         combined_spec[fib, :, :], combined_err[fib, :, :] = combine_stellar_spectra(spec_list, spec_sig_list)
-    return combined_spec,combined_err,baryrv
+
+    unique_fiber_labels = [dataset[0].labels[fib] for fib in unique_fibers]
+
+    combined_spectra = data.Spectrum(fluxes=combined_spec[unique_fibers], errs=combined_err[unique_fibers], header=dataset[0].header, labels=unique_fiber_labels)
+    combined_spectra.filedir = dataset[0].filedir
+    combined_spectra.filename = dataset[0].filename.replace(".fits", "_combined.fits")
+    tnow = time.Time.now()
+    combined_spectra.header.add_history("[{0}] Combined {1} Spectra Together".format(str(tnow), len(dataset)))
+    combined_spectra.header['DRPNFILE'] = len(dataset)
+    for i, frame in enumerate(dataset):
+        combined_spectra.header['FILE{0}'.format(i)] = frame.filename
+    combined_spectra.header['BARYRV'] = np.mean(baryrv_list)
+    for i, fib in enumerate(np.unique(whichfiber)):
+        combined_spectra.header['BARYRV{0}'.format(i)] = baryrv[fib]
+
+    return combined_spectra
 
 def get_avg_mjd_radec(filelist):
     """
