@@ -27,7 +27,7 @@ if __name__ == "__main__":
     filelist_spectra = glob(os.path.join(kpicpublicdir, "20200928_HIP_95771","fluxes", "*fluxes.fits"))
     mytrfilename = os.path.join(kpicpublicdir,"20200928_zet_Aql","calib","nspec200928_0049_trace.fits")
 
-    filename_oldwvs = os.path.join(kpicpublicdir, "utils", "first_guess_wvs_20200607_HIP_81497.fits")
+    filename_oldwvs = os.path.join(kpicpublicdir, "utils", "first_guess_wvs_20200928_HIP_81497.fits")
     filename_phoenix_rvstandard = os.path.join(kpicpublicdir, "utils", "HIP_81497_lte03600-1.00-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits")
     filename_phoenix_wvs =os.path.join(kpicpublicdir, "utils", "WAVE_PHOENIX-ACES-AGSS-COND-2011.fits")
 
