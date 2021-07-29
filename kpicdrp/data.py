@@ -168,6 +168,34 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
+    def get_header_values(self, key):
+        """
+        Grabs the header value for a given keyword from all frames of a dataset
+
+        Args:
+            key (str): header keyword
+
+        Returns:
+            (list): list of values of that keyword for each element of the dataset
+        """
+        vals = [frame.header[key] for frame in self]
+        
+        return vals
+
+    def get_dataset_attributes(self, field):
+        """
+        Grabs a particular attribute from each attribute in this dataset as a list
+        
+        Args:
+            field (str): attribute name (e.g., "filename" to get all frame.filename)
+
+        Returns:
+            (list): list of values of that attribute for each element in the dataset
+        """
+        vals = [frame.__dict__[field] for frame in self]
+
+        return vals
+
         
 class DetectorFrame(BasicData):
     """
@@ -386,23 +414,25 @@ class Spectrum(BasicData):
     Extracted spectral data. Supports data from multiple traces and orders.
 
     Args:
-        flux (np.array): extracted fluxes. Dimensions are (N_traces x N_orders x N_columns)
+        fluxes (np.array): extracted fluxes. Dimensions are (N_traces x N_orders x N_columns)
         errs (np.array): uncertainties on fluxes. (N_traces x N_orders x N_columns)
+        labels (list of str): labels (e.g, 's1', 'b3') for each trace. Same convention as TraceParams
         wavecal (Wavecal): wavelength calibration if desired (optional)
         header: FITS header (only needed if creating a new object from scratch)
         filepath (str): path to file
 
     Attributes:
-        flux: extracted fluxes. Dimensions are (N_traces x N_orders x N_columns)
+        fluxes: extracted fluxes. Dimensions are (N_traces x N_orders x N_columns)
         errs: uncertainties on fluxes. (N_traces x N_orders x N_columns)
         wvs: corresponding wavelengths if calibrated. (N_traces x N_orders x N_columns)
     """
     type = "spectrum"
 
-    def __init__(self, flux=None, errs=None, wavecal=None, header=None, filepath=""):
-        super().__init__(flux, header, filepath)
+    def __init__(self, fluxes=None, errs=None, labels=None, wavecal=None, header=None, filepath=""):
+        super().__init__(fluxes, header, filepath)
+        self.fluxes = self.data
 
-        if errs is None:
+        if errs is not None:
             self.errs = errs
         else:
             self.errs = self.extdata[0]
@@ -411,10 +441,21 @@ class Spectrum(BasicData):
             self._wvs = wavecal.wvs
             self.header['WAVCALIB'] = True
             self.header['WAVEFILE'] = wavecal.filename
-        elif len(self.extdata) > 1:
+        elif (self.extdata is not None) and (len(self.extdata) > 1):
             self._wvs = self.extdata[1]
         else:
             self._wvs = None
+
+        # grab labels for each fiber
+        if labels is not None:
+            if len(labels) != self.fluxes.shape[0]:
+                raise ValueError("There are {0} traces but {1} labels are passed in".format(self.fluxes.shape[0], len(labels)))
+            self.labels = labels
+        else:
+            num_fibs = self.fluxes.shape[0]
+            self.labels = []
+            for i in range(num_fibs):
+                self.labels.append(self.header['FIB{0}'.format(i)])
 
     # create the data field dynamically 
     @property
@@ -423,6 +464,38 @@ class Spectrum(BasicData):
             raise ValueError("This spectrum is not wavelength calibrated.")
         else:
             return self._wvs
+
+    def save(self, filename=None, filedir=None): 
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filename (str): filepath to save to. Use self.filename if not specified
+            caldb (TraceCalDB object): if specified, calibration database to keep track of traces
+        """
+        self.header['DATATYPE'] = "Spectrum"
+
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+        
+        filepath = os.path.join(self.filedir, self.filename)
+        
+        # write labels to header
+        for i, label in enumerate(self.labels):
+            self.header['FIB{0}'.format(i)] = label
+
+        hdulist = fits.HDUList()
+        hdu = fits.PrimaryHDU(data=self.fluxes, header=self.header)
+        hdulist.append(hdu)
+        exthdu1 = fits.ImageHDU(data=self.errs)
+        hdulist.append(exthdu1)
+        if self._wvs is not None:
+            exthdu2 = fits.ImageHDU(data=self.wvs)
+            hdulist.append(exthdu2)
+        hdulist.writeto(filepath, overwrite=True)
+        hdulist.close()
 
 class Wavecal(BasicData):
     """
