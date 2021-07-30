@@ -4,7 +4,8 @@ import configparser
 import pathlib
 from astropy.time import Time
 import numpy as np
-from kpicdrp.data import BadPixelMap, Background, TraceParams
+from kpicdrp.data import BadPixelMap, Background, TraceParams, DetectorFrame
+from fnmatch import fnmatch
 
 
 class CalDB():
@@ -187,6 +188,42 @@ class DetectorCalDB(CalDB):
 
         else:
             raise ValueError("Specify type of calibration--Background or BadPixelMap")
+    
+    def readd_calib(self, root_dir):
+        """
+        Readds calibrated backgrounds and bad pixel maps to caldb from a root directory and its subdirectories
+        Looks at files ending in '_coadds1.fits'
+        
+        Args:
+            root_dir(str): filepath to main directory with calibrated files
+        
+        Fields:
+            iscalib_list: list of files that end in '_coadds1.fits' but don't have ISCALIB keyword in header so were not added to det_caldb
+        """
+        list = []
+        self.iscalib_list = []
+        pattern = "*_coadds1.fits"
+
+        for path, subdirs, files in os.walk(root_dir):
+            for name in files:
+                if fnmatch(name,pattern):
+                    list.append(str(os.path.join(path,name)))
+
+        for file in list:
+            detframe = DetectorFrame(filepath=file)
+            try:
+                if detframe.header["ISCALIB"] == True:
+                    if  detframe.header["CALIBTYP"] == "Background":
+                        bkgd = Background(filepath = file)
+                        det_caldb.create_entry(bkgd)
+                        det_caldb.save()
+                    elif detframe.header["CALIBTYP"] == "BadPixelMap":
+                        bpm = BadPixelMap(filepath = file)
+                        det_caldb.create_entry(bpm)
+                        det_caldb.save()
+            except KeyError:
+                self.iscalib_list.append(str(os.path.abspath(file)))
+                pass
 
 
 class TraceCalDB(CalDB):
