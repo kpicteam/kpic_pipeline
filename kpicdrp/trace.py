@@ -1,4 +1,5 @@
 import astropy.io.fits as pyfits
+import astropy.time as time
 import os
 from glob import glob
 import matplotlib.pyplot as plt
@@ -12,11 +13,13 @@ from scipy.optimize import minimize
 import itertools
 # from utils.badpix import *
 # from utils.misc import *
-import pandas as pd
+
 
 from scipy.signal import find_peaks
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.optimize import minimize
+
+import kpicdrp.data as data
 
 def profile_model(paras,y):
     A, w, y0, B= paras
@@ -132,41 +135,36 @@ def tophat(x, hat_left, hat_right):
 def objective(params, x, y):
     return np.sum(np.abs(tophat(x, *params) - y))
 
-def fibers_guess(im_list,N_order=9):
+def fibers_guess(fiber_dataset, N_order=9):
     """
     Find first guess position of the traces from a list of images.
 
     Args:
-        filelist: list of images (ny,nx). There should be at least one image per fiber.
-            The order of the images does not matter.
+        fiber_dataset (data.Dataset): DetectorFrame images for trace calibration
         N_order: Number of orders in the image
 
     Returns:
-        fibers: Dictionary with rough location of the traces for each order and fiber.
-            Fiber 1: fibers[0] = [[row1,row2],[row3,row4],...]
-                With [row1,row2] defining the bounds of order 1, then [row3,row4] for order 2, etc.
-            Fiber 2: fibers[1] = etc.
+        guess_params (data.TraceParams): trace parameters with rough locations and widths fixed to 3 pixels FWHM
     """
 
-    corr = np.zeros((len(im_list),len(im_list)))
-    im_norm_list = [np.sqrt(np.nansum(im1**2)) for im1 in im_list]
-    for k,im1 in enumerate(im_list):
-        for l,im2 in enumerate(im_list):
-            corr[k,l] = np.nansum(im1*im2)/(im_norm_list[k]*im_norm_list[l])
+    corr = np.zeros((len(fiber_dataset), len(fiber_dataset)))
+    im_norm_list = [np.sqrt(np.nansum(frame.data**2)) for frame in fiber_dataset]
+    for k, frame1 in enumerate(fiber_dataset):
+        for l, frame2 in enumerate(fiber_dataset):
+            corr[k,l] = np.nansum(frame1.data * frame2.data)/(im_norm_list[k] * im_norm_list[l])
     sorted_files = []
     while np.sum(corr) != 0:
-        ids = np.where(corr[:,np.where(np.nansum(corr,axis=0)!=0)[0][0]]>0.9)[0]
+        ids = np.where(corr[:,np.where(np.nansum(corr,axis=0)!=0)[0][0]] > 0.9)[0]
         sorted_files.append(ids)
         corr[ids,:] = 0
         corr[:,ids] = 0
 
-    im_list = np.array(im_list)
     fibers_unsorted = {}
-    for k,file_ids in enumerate(sorted_files):
-        im = np.nanmedian(im_list[file_ids,:,:],axis=0)
-        background_cutoff = np.percentile(im[np.where(np.isfinite(im))],97)
-        im[np.where(im<background_cutoff)] = 0
-        flattened = np.nanmean(im,axis=1)
+    for k, file_ids in enumerate(sorted_files):
+        med_frame = np.nanmedian(fiber_dataset[file_ids].data, axis=0)
+        background_cutoff = np.percentile(med_frame[np.where(np.isfinite(med_frame))], 97)
+        med_frame[np.where(med_frame < background_cutoff)] = 0
+        flattened = np.nanmean(med_frame, axis=1)
         peaks = find_peaks(flattened,distance=120,width=[2,None])[0]#,width=[2,None],plateau_size=None
         peaks_val = np.array([flattened[peak] for peak in peaks])
         peaks = peaks[np.argsort(peaks_val)[::-1][0:N_order]]
@@ -191,15 +189,31 @@ def fibers_guess(im_list,N_order=9):
     # plt.show()
     sorted_fib = np.argsort([np.nanmean(myvals) for myvals in fibers_unsorted.values()])[::-1]
 
-    fibers = {}
-    for k,argfib in enumerate(sorted_fib):
-        fibers[k] = np.array(fibers_unsorted[argfib])
 
-    return fibers
+    guess_locs = []
+    guess_labels = []
+    for k,argfib in enumerate(sorted_fib):
+        guess_locs_thisfib = []
+        for ends in fibers_unsorted[argfib]:
+            num_channels = fiber_dataset[0].data.shape[-1]
+            this_order_guesspos = np.interp(np.arange(num_channels), [0, num_channels], ends)
+            guess_locs_thisfib.append(this_order_guesspos)
+        guess_locs.append(guess_locs_thisfib)
+        guess_labels.append("s{0}".format(k + 1))
+
+    guess_locs = np.array(guess_locs)
+    guess_labels = np.array(guess_labels)
+    guess_widths = np.ones(guess_locs.shape) * (3 / (2 * np.sqrt(2 * np.log(2))))
+    guess_params = data.TraceParams(locs=guess_locs, widths=guess_widths, labels=guess_labels, header=fiber_dataset[0].header)
+    guess_params.add_parent_filenames(fiber_dataset)
+    tnow = time.Time.now()
+    guess_params.header['HISTORY'] = "[{0}] Guessed {1} fiber traces".format(str(tnow), len(sorted_fib))
+
+    return guess_params
 
 # ----
 
-def trace(vec,x):
+def _smoothing(vec,x):
     # vec = trace_calib[fiber_num,order_id, :, para_id]
     vec_cp = copy(vec)
 
@@ -262,35 +276,58 @@ def trace(vec,x):
     return polyfit_trace_calib,smooth_trace_calib
 
 def smooth(trace_calib):
+    """
+    Smooths the trace positions and widths using a spline 
+
+    Args:
+        trace_calib (data.TraceParams): input trace calibration to smooth
+
+    Returns:
+        data.TraceParams: smooothed trace calibration
+    """
     print('trace_calib',trace_calib)
-    polyfit_trace_calib = np.zeros(trace_calib.shape)+np.nan
-    smooth_trace_calib = np.zeros(trace_calib.shape)+np.nan
+    polyfit_trace_calib = trace_calib.copy() 
+    smooth_trace_calib = trace_calib.copy()
     # paras0 = [A, w, y0, B, rn] or [A, w, y0, B, rn, g]?
-    x = np.arange(0, trace_calib.shape[2])
-    for fiber_num in np.arange(trace_calib.shape[0]):
-        for order_id in range(trace_calib.shape[1]):
-            for para_id in range(5):
-                print("fiber_num",fiber_num,"order_id",order_id, "para_id", para_id)
-                vec = trace_calib[fiber_num,order_id, :, para_id]
-                poly,smooth = trace(vec,x)
-                if poly is not None and smooth is not None:
-                    polyfit_trace_calib[fiber_num,order_id, :, para_id],smooth_trace_calib[fiber_num,order_id, :, para_id] = poly,smooth
-    return polyfit_trace_calib,smooth_trace_calib
+    x = np.arange(0, trace_calib.data.shape[2])
+    for fiber_num in np.arange(trace_calib.data.shape[0]):
+        for order_id in range(trace_calib.data.shape[1]):
 
-def guess_star_fiber(image,fibers):
-    # fibers is a dict wih 0, 1, 2, 3... and for each x1 and x2
-    # fiber1=None
-    # fiber2=None
-    # fiber3=None
-    # fiber4=None
+            vec = trace_calib.locs[fiber_num, order_id]
+            poly, smoothed = _smoothing(vec,x)
+            polyfit_trace_calib.locs[fiber_num, order_id] = poly
+            smooth_trace_calib.locs[fiber_num, order_id] = smoothed
 
-    # dictionary... length of... num of fibes
+            vec = trace_calib.widths[fiber_num, order_id]
+            poly, smoothed = _smoothing(vec,x)
+            polyfit_trace_calib.widths[fiber_num, order_id] = poly
+            smooth_trace_calib.widths[fiber_num, order_id] = smoothed
+
+    tnow = time.Time.now()
+    trace_calib.header['HISTORY'] = "[{0}] Fiber params smoothed".format(str(tnow))
+
+
+    return smooth_trace_calib
+
+def guess_star_fiber(image, fiber_params):
+    """
+    Guess which fiber the corresponding data of a *bright* star is taken in
+
+    Args:
+        image (data.DetectorFrame): a 2D image with a single stellar trace
+        fiber_params (data.TraceParams): trace calibration file to use to identify fiber traces
+
+    Returns:
+        str: label corresponding to the fiber numer in fiber_params.label for this image
+    """
 
     fiber_templates = []
-    fiber_nums = list(fibers.keys())
-    for f_num in fiber_nums: # in order...?
+    fiber_label = fiber_params.labels
+    for i, f_num in enumerate(fiber_label): # in order...?
         fiber_template = np.zeros(2048)
-        for x1,x2 in fibers[f_num]:
+        for locs in fiber_params.locs[i]:
+            x1 = int(np.min(locs))
+            x2 = int(np.max(locs))
             fiber_template[x1:x2] = 1
         fiber_templates.append(fiber_template)
     flattened = np.nanmean(image,axis=1)
@@ -322,208 +359,68 @@ def guess_star_fiber(image,fibers):
         flat_ftemps.append(np.nansum(template * flattened))
 
     # return np.argmax([np.nansum(fiber1_template * flattened),np.nansum(fiber2_template * flattened),np.nansum(fiber3_template * flattened),np.nansum(fiber4_template * flattened)])
-    return np.argmax(flat_ftemps)
-
-def save(trace_calib,residuals,polyfit_trace_calib,smooth_trace_calib,calib_dir,mydate,header,plot=False):
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=trace_calib,header=header))
-    out = os.path.join(calib_dir, mydate+"_trace_allparas.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=trace_calib[:,:,:,1],header=header))
-    out = os.path.join(calib_dir, mydate+"_line_width.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=trace_calib[:,:,:,2],header=header))
-    out = os.path.join(calib_dir, mydate+"_trace_loc.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=residuals,header=header))
-    out = os.path.join(calib_dir, mydate+"_trace_residuals.fits")
-    try:
-        hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
+    return fiber_label[np.argmax(flat_ftemps)]
 
 
-    # if "20191215_kap_And" in mydir:
-    #     trace_calib[:,0:8,:,:] = trace_calib[:,1::,:,:]
-    #     trace_calib[:, 8, :, :] = np.nan
 
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=polyfit_trace_calib[:,:,:,1],header=header))
-    hdulist.append(pyfits.ImageHDU(data=trace_calib[:,:,:,1]-polyfit_trace_calib[:,:,:,1]))
-    out = os.path.join(calib_dir, mydate+"_line_width_smooth.fits")
-    try: hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
+def fit_trace(fiber_dataset, guess_params, fiber_list=None, numthreads=None, fitbackground=False, return_residuals=False):
+    """
+    Fits the trace location and width to a dataset containing a bright signal on individual fibers
 
-    hdulist = pyfits.HDUList()
-    hdulist.append(pyfits.PrimaryHDU(data=polyfit_trace_calib[:,:,:,2],header=header))
-    hdulist.append(pyfits.ImageHDU(data=trace_calib[:,:,:,2]-polyfit_trace_calib[:,:,:,2]))
-    out = os.path.join(calib_dir, mydate+"_trace_loc_smooth.fits")
-    try: hdulist.writeto(out, overwrite=True)
-    except TypeError:
-        hdulist.writeto(out, clobber=True)
-    hdulist.close()
-
-    if plot: #plot
-        im = np.nanmean(cube,axis=0)
-        trace_loc_filename = glob(os.path.join(calib_dir, "*_trace_loc_smooth.fits"))[0]
-        hdulist = pyfits.open(trace_loc_filename)
-        trace_loc = hdulist[0].data
-        trace_loc[np.where(trace_loc == 0)] = np.nan
-        print(trace_loc.shape)
-        # plt.figure(1)
-        # for order_id in range(9):
-        #     plt.subplot(9, 1, 9-order_id)
-        #     plt.plot(trace_loc[1,order_id,:],linestyle="-",linewidth=2)
-        #     plt.legend()
-        # plt.show()
-
-        trace_loc_slit = np.zeros((trace_loc.shape[0] * 2, trace_loc.shape[1], trace_loc.shape[2]))
-        trace_loc_dark = np.zeros((trace_loc.shape[0] * 2, trace_loc.shape[1], trace_loc.shape[2]))
-        for order_id in range(9):
-            dy1 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[1, order_id, :]) / 2
-            dy2 = np.nanmean(trace_loc[0, order_id, :] - trace_loc[2, order_id, :])
-            # exit()
-            if np.isnan(dy1):
-                dy1 = 10
-            if np.isnan(dy2):
-                dy2 = 40
-            print(dy1, dy2)
-
-            trace_loc_slit[0, order_id, :] = trace_loc[0, order_id, :] + dy1
-            trace_loc_slit[1, order_id, :] = trace_loc[1, order_id, :] + dy1
-            trace_loc_slit[2, order_id, :] = trace_loc[2, order_id, :] + dy1
-            trace_loc_slit[3, order_id, :] = trace_loc[0, order_id, :] + dy2
-            trace_loc_slit[4, order_id, :] = trace_loc[1, order_id, :] + dy2 + dy1
-            trace_loc_slit[5, order_id, :] = trace_loc[2, order_id, :] + dy2 + 2 * dy1
-
-            if order_id == 0:
-                trace_loc_dark[0, order_id, :] = trace_loc[0, order_id, :] + 1 * dy2 + dy1 + 2 * dy1
-                trace_loc_dark[1, order_id, :] = trace_loc[1, order_id, :] + 1 * dy2 + dy1 + 3 * dy1
-                trace_loc_dark[2, order_id, :] = trace_loc[2, order_id, :] + 1 * dy2 + dy1 + 4 * dy1
-                trace_loc_dark[3, order_id, :] = trace_loc[0, order_id, :] + 1 * dy2 + dy2 + 2 * dy1
-                trace_loc_dark[4, order_id, :] = trace_loc[1, order_id, :] + 1 * dy2 + dy2 + dy1 + 2 * dy1
-                trace_loc_dark[5, order_id, :] = trace_loc[2, order_id, :] + 1 * dy2 + dy2 + 2 * dy1 + 2 * dy1
-            else:
-                trace_loc_dark[0, order_id, :] = trace_loc[0, order_id, :] - 3 * dy2 + dy1 + 2 * dy1
-                trace_loc_dark[1, order_id, :] = trace_loc[1, order_id, :] - 3 * dy2 + dy1 + 3 * dy1
-                trace_loc_dark[2, order_id, :] = trace_loc[2, order_id, :] - 3 * dy2 + dy1 + 4 * dy1
-                trace_loc_dark[3, order_id, :] = trace_loc[0, order_id, :] - 3 * dy2 + dy2 + 2 * dy1
-                trace_loc_dark[4, order_id, :] = trace_loc[1, order_id, :] - 3 * dy2 + dy2 + dy1 + 2 * dy1
-                trace_loc_dark[5, order_id, :] = trace_loc[2, order_id, :] - 3 * dy2 + dy2 + 2 * dy1 + 2 * dy1
-
-        if plot:
-            plt.figure(1)
-            plt.imshow(im,origin="lower")
-            plt.clim([50,200])
-            for order_id in range(9):
-                for fib in range(3):
-                    plt.plot(trace_loc[fib, order_id, :], label="fibers", color="cyan",linestyle="--",linewidth=1)
-                for fib in np.arange(0,6):
-                    plt.plot(trace_loc_slit[fib, order_id, :], label="background", color="red",linestyle="-.",linewidth=1)
-                for fib in np.arange(0,6):
-                    plt.plot(trace_loc_dark[fib, order_id, :], label="dark", color="white",linestyle=":",linewidth=1)
-            plt.xlim([0,im.shape[1]])
-            plt.ylim([0,im.shape[0]])
-            plt.show()
-
-def load_filelist(filelist,background_med_filename,persisbadpixmap_filename):
-    hdulist = pyfits.open(background_med_filename)
-    background = hdulist[0].data
-    background_header = hdulist[0].header
-    tint = int(background_header["ITIME"])
-
-    hdulist = pyfits.open(persisbadpixmap_filename)
-    persisbadpixmap = hdulist[0].data
-    persisbadpixmap_header = hdulist[0].header
-    ny,nx = persisbadpixmap.shape
-
-    im_list = []
-    badpixmap_list = []
-    # fiber_list = []
-    header_list = []
-
-    for filename in filelist:
-        print(filename)
-        hdulist = pyfits.open(filename)
-        im = hdulist[0].data.T[:,::-1]
-        header = hdulist[0].header
-        header_list.append(header)
-        if tint != int(header["ITIME"]):
-            raise Exception("bad tint {0}, should be {1}: ".format(int(header["ITIME"]),tint) + filename)
-        hdulist.close()
-
-        im_skysub = im-background
-        badpixmap = persisbadpixmap#*get_badpixmap_from_laplacian(im_skysub,bad_pixel_fraction=1e-2)
-
-        # plt.imshow(im_skysub*badpixmap,interpolation="nearest",origin="lower")
-        # plt.show()
-
-        im_list.append(im_skysub)
-        badpixmap_list.append(badpixmap)
-        # fiber_list.append(guess_star_fiber(im_skysub*badpixmap,fibers))
-    cube = np.array(im_list)
-    badpixcube = np.array(badpixmap_list)
-    # fiber_list = np.array(fiber_list)
-    # print(fiber_list)
-
-    # return cube,badpixcube,fiber_list,ny,nx
-    return cube,badpixcube,ny,nx
-
-def fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order=9,numthreads=30,fitbackground=False):
-    try:
-        import mkl
-        mkl.set_num_threads(1)
-    except: pass
-    ##calculate traces, FWHM, stellar spec for each fibers
-    # fiber,order,x,[y,yerr,FWHM,FHWMerr,flux,fluxerr],
-    fiber_nums = np.array(list(fibers.keys()))
-    num_fibers = len(fiber_nums)
+    Args:
+        fiber_dataset (data.Dataset): dataset of DetectorFrames to calibrate the fiber traces with
+        guess_params (data.TraceParams): guess trace params or a previous calibrated trace params file
+        fiber list (list of str): if not None, a list of fiber labels for each frame. Otherwise, the code will guess it
+        numthreads (int): How many processes to parallelize this with. By default it uses all available processors
+        fitbackground (bool): if True, fits for a background level when also fitting the trace profile
+        return_residuals (bool): if True, also returns the residuals to the fits (defualt False)
+        add_bkgd_traces (bool): if True, automatically guesses trace locations to sample the slit and dark current background (default True)
+    """
+    if fiber_list is None:
+        # Identify which fibers was observed in each file
+        fiber_list = []
+        for frame in fiber_dataset:
+            fiber_list.append(guess_star_fiber(frame.data, guess_params))
 
     fiber_list = np.array(fiber_list)
 
-    trace_calib = np.zeros((num_fibers,N_order,nx,5))
-    residuals = np.zeros((num_fibers,ny,nx))
-    for fiber_num in fiber_nums:#np.arange(0,3):
+    if numthreads is None:
+        numthreads = mp.cpu_count()
+
+    # get how many science fibers there are
+    num_fibers = len(guess_params.get_sci_indices())
+
+    badpixcube = np.ones(fiber_dataset.data.shape)
+    badpixcube[np.isnan(fiber_dataset.data)] == np.nan
+
+    Norders = guess_params.locs.shape[1]
+    Nchannels = guess_params.locs.shape[2]
+    Ny = fiber_dataset.data.shape[-2]
+
+    pool = mp.Pool(processes=numthreads)
+
+
+    trace_calib = np.zeros((num_fibers, Norders, Nchannels, 5))
+    residuals = np.zeros((num_fibers, Ny, Nchannels))
+    for fiber_num, fiber_label in enumerate(guess_params.labels):
         print('fiber_num,fiber_list',fiber_num,fiber_list)
         print('np.where(fiber_num==fiber_list)',np.where(fiber_num==fiber_list))
 
-        if np.size(np.where(fiber_num==fiber_list)[0]) == 0:
+        if np.size(np.where(fiber_label == fiber_list)[0]) == 0:
             print('DID CONTINUE')
             continue
 
-        fib_cube = cube[np.where(fiber_num == fiber_list)[0], :, :]
-        fib_badpixcube = badpixcube[np.where(fiber_num == fiber_list)[0], :, :]
+        fib_cube = fiber_dataset.data[np.where(fiber_label == fiber_list)[0], :, :]
+        fib_badpixcube = badpixcube[np.where(fiber_label == fiber_list)[0], :, :]
 
         im = np.median(fib_cube*fib_badpixcube,axis=0)
         badpix = np.ones(fib_badpixcube.shape[1::])
         badpix[np.where(np.nansum(fib_badpixcube,axis=0)<np.min([3,fib_badpixcube.shape[0]]))] = np.nan
 
 
-        pool = mp.Pool(processes=numthreads)
-
-        for order_id,(y1,y2) in enumerate(fibers[fiber_num]):
+        for order_id, order_locs in enumerate(guess_params.locs[fiber_num]):
+            y1 = int(order_locs[0])
+            y2 = int(order_locs[-1])
             print('order_id,(y1,y2)',order_id,(y1,y2))
 
             _y1,_y2 = np.clip(y1-10,0,2047),np.clip(y2+10,0,2047)
@@ -548,7 +445,7 @@ def fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order=9,numthreads=30,fi
                 exit()
             else:
                 chunk_size=10
-                N_chunks = nx//chunk_size
+                N_chunks = Nchannels//chunk_size
                 indices_chunks = []
                 data_chunks = []
                 badpix_chunks = []
@@ -556,9 +453,9 @@ def fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order=9,numthreads=30,fi
                     indices_chunks.append(np.arange(k*chunk_size,(k+1)*chunk_size))
                     data_chunks.append(im[_y1:_y2,k*chunk_size:(k+1)*chunk_size])
                     badpix_chunks.append(badpix[_y1:_y2,k*chunk_size:(k+1)*chunk_size])
-                indices_chunks.append(np.arange((N_chunks-1)*chunk_size,nx))
-                data_chunks.append(im[_y1:_y2,(N_chunks-1)*chunk_size:nx])
-                badpix_chunks.append(badpix[_y1:_y2,(N_chunks-1)*chunk_size:nx])
+                indices_chunks.append(np.arange((N_chunks-1)*chunk_size,Nchannels))
+                data_chunks.append(im[_y1:_y2,(N_chunks-1)*chunk_size:Nchannels])
+                badpix_chunks.append(badpix[_y1:_y2,(N_chunks-1)*chunk_size:Nchannels])
                 outputs_list = pool.map(_fit_trace, zip(indices_chunks,
                                                             itertools.repeat(yindices),
                                                             data_chunks,
@@ -574,98 +471,74 @@ def fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order=9,numthreads=30,fi
         # print('trace_calib[fiber_num]',trace_calib[fiber_num])
         # print('residuals[fiber_num]',residuals[fiber_num])
 
-        pool.close()
-        pool.join()
-
-    return trace_calib,residuals
-
-# main_dir = "/Users/eeswim/Dropbox/kpic_pipeline/public_kpic_data/" #"../../kpic_analysis/tutorial_data/" # main data dir
-# obj_folder = "20200702_HIP_81497"
-
-def run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True):
+    pool.close()
+    pool.join()
     
-    target_dir = os.path.join(main_dir,obj_folder) # the star of interest
-    calib_dir = os.path.join(target_dir, "calib") # calib subdir
-    raw_data_dir = os.path.join(target_dir, "raw") # raw 2D images
+    # The dimensions of trace calib are (4 fibers, 9 orders, 2048 pixels, 5) #[A, w, y0, rn, B]
+    # trace_calib[:,:,:,0]: amplitude of the 1D gaussian
+    # trace_calib[:,:,:,1]: trace width (1D gaussian sigma)
+    # trace_calib[:,:,:,2]: trace y-position
+    # trace_calib[:,:,:,3]: noise (ignore)
+    # trace_calib[:,:,:,4]: background (ignore)
 
-    mydate = os.path.basename(target_dir).split("_")[0] # assumes folder is in "20200702_HIP_81497" format
+    trace_params = data.TraceParams(locs=trace_calib[:,:,:,2], widths=trace_calib[:,:,:,1], labels=guess_params.labels, header=fiber_dataset[0].header)
+    trace_params.filedir = fiber_dataset[0].filedir
+    trace_params.filename = fiber_dataset[0].filename[:-5] + "_trace.fits"
+    # add data reduction history
+    trace_params.add_parent_filenames(fiber_dataset)
+    tnow = time.Time.now()
+    trace_params.header['HISTORY'] = "[{0}] Fit {1} fiber traces in {2} orders".format(str(tnow), num_fibers, Norders)
 
-    filelist = glob(os.path.join(raw_data_dir, "*.fits"))
-    hdulist = pyfits.open(filelist[0])
-    header = hdulist[0].header
-
-    background_med_filename = glob(os.path.join(calib_dir,"*background*.fits"))[0]
-    persisbadpixmap_filename = glob(os.path.join(calib_dir,"*persistent_badpix*.fits"))[0]
-
-    # cube,badpixcube,fiber_list,ny,nx = load_filelist(filelist,background_med_filename,persisbadpixmap_filename)
-    cube,badpixcube,ny,nx = load_filelist(filelist,background_med_filename,persisbadpixmap_filename)
-
-    if make_guess:
-        fibers = fibers_guess(cube-badpixcube,N_order=N_order)
-    else: 
-        fiber1 = [[70, 150], [260, 330], [460, 520], [680 - 10, 720 + 10], [900 - 15, 930 + 15], [1120 - 5, 1170 + 5],
-                  [1350, 1420], [1600, 1690], [1870, 1980]]
-        fiber2 = [[50, 133], [240, 320], [440, 510], [650, 710], [880 - 15, 910 + 15], [1100 - 5, 1150 + 5], [1330, 1400],
-                  [1580, 1670], [1850, 1960]]
-        fiber3 = [[30, 120], [220, 300], [420, 490], [640 - 5, 690 + 5], [865 - 20, 890 + 20], [1090 - 10, 1130 + 10],
-                  [1320, 1380], [1570, 1650], [1840, 1940]]
-        fibers = {0: fiber1, 1: fiber2, 2: fiber3}
-
-        # if usershift != 0:
-        #     all fiber numbers + usershift
-
-    fiber_list = []
-    for image in cube-badpixcube:
-        fiber_list.append(guess_star_fiber(image,fibers))
-
-    # print(fibers,fiber_list,cube,badpixcube,ny,nx,N_order)
-
-    trace_calib,residuals = fit_trace(fibers,fiber_list,cube,badpixcube,ny,nx,N_order,numthreads=30,fitbackground=False)
-
-    polyfit_trace_calib,smooth_trace_calib = smooth(trace_calib)
-
-    save(trace_calib,residuals,polyfit_trace_calib,smooth_trace_calib,calib_dir,mydate,header,plot=False)
+    if return_residuals:
+        return trace_params, residuals
+    else:
+        return trace_params
 
 
-# run_trace_fit(main_dir,obj_folder,N_order=9,usershift=0,make_guess=True)
-
-
-def get_background_traces(trace_loc):
+def add_background_traces(trace_dat):
     """
-    Returns fictitious trace location sampling the slit background and detector background (i.e., out of slit "dark")
+    Adds fictitious trace location sampling the slit background and detector background (i.e., out of slit "dark")
+    Labels for slit background is 'b1, b2, ..'
+    Labels for detector background (dark) is 'd1, d2..'
 
     Args:
-        trace_loc: list of size N_fibers of trace centers arrays with size (N_orders, Nx)
+        trace_dat (TraceParams): trace locations for the science fibers
+
+    Return:
+        new_trace_dat (TraceParams): trace locations with slit background and detector background traces included
     """
-    trace_loc_cp = copy(trace_loc)
-    trace_loc_cp[np.where(trace_loc_cp == 0)] = np.nan
+    new_trace_dat = trace_dat.copy()
 
-    trace_loc_slit = np.zeros((trace_loc_cp.shape[0], trace_loc_cp.shape[1], trace_loc_cp.shape[2]))
-    trace_loc_dark = np.zeros((trace_loc_cp.shape[0], trace_loc_cp.shape[1], trace_loc_cp.shape[2]))
+    trace_loc_slit = np.zeros((trace_dat.locs.shape[0], trace_dat.locs.shape[1], trace_dat.locs.shape[2]))
+    trace_loc_dark = np.zeros((trace_dat.locs.shape[0], trace_dat.locs.shape[1], trace_dat.locs.shape[2]))
 
-    # print(trace_loc_cp.shape)
-    # plt.figure(1)
-    # for order_id in range(9):
-    #     plt.subplot(9, 1, 9-order_id)
-    #     plt.plot(trace_loc_cp[1,order_id,:],linestyle="-",linewidth=2)
-    #     plt.legend()
-    # plt.show()
-
-    for order_id in range(trace_loc_cp.shape[1]):
-        dy1 = np.nanmean(trace_loc_cp[0, order_id, :] - trace_loc_cp[1, order_id, :]) / 2
-        dy2 = np.nanmean(trace_loc_cp[0, order_id, :] - trace_loc_cp[-1, order_id, :])
+    for order_id in range(new_trace_dat.locs.shape[1]):
+        dy1 = np.nanmean(new_trace_dat.locs[0, order_id, :] - new_trace_dat.locs[1, order_id, :]) / 2
+        dy2 = np.nanmean(new_trace_dat.locs[0, order_id, :] - new_trace_dat.locs[-1, order_id, :])
         # exit()
         if np.isnan(dy1):
             dy1 = 10
         if np.isnan(dy2):
             dy2 = 40
-        for fib_id in range(trace_loc_cp.shape[0]):
+        for fib_id in range(new_trace_dat.locs.shape[0]):
 
-            trace_loc_slit[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] - dy1
+            trace_loc_slit[fib_id, order_id, :] = new_trace_dat.locs[fib_id, order_id, :] - dy1
 
             if order_id == 0:
-                trace_loc_dark[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] + 1.5 * dy2 - fib_id * dy1
+                trace_loc_dark[fib_id, order_id, :] = new_trace_dat.locs[fib_id, order_id, :] + 1.5 * dy2 - fib_id * dy1
             else:
-                trace_loc_dark[fib_id, order_id, :] = trace_loc_cp[fib_id, order_id, :] - 3 * dy2 + (3 + fib_id) * dy1
+                trace_loc_dark[fib_id, order_id, :] = new_trace_dat.locs[fib_id, order_id, :] - 3 * dy2 + (3 + fib_id) * dy1
 
-    return trace_loc_slit, trace_loc_dark
+
+    # add slit and dark traces to trace params
+    # first the slit backgrounds
+    new_trace_dat.locs = np.append(new_trace_dat.locs, trace_loc_slit, axis=0)
+    new_trace_dat.widths = np.append(new_trace_dat.widths, trace_dat.widths, axis=0)
+    new_trace_dat.labels = np.append(new_trace_dat.labels,  ['b{0}'.format(i) for i in range(trace_loc_slit.shape[0])])
+    # next the traces
+    new_trace_dat.locs = np.append(new_trace_dat.locs, trace_loc_dark, axis=0)
+    new_trace_dat.widths = np.append(new_trace_dat.widths, trace_dat.widths, axis=0)
+    new_trace_dat.labels = np.append(new_trace_dat.labels,  ['d{0}'.format(i) for i in range(trace_loc_slit.shape[0])])
+
+
+    return new_trace_dat
