@@ -255,10 +255,8 @@ class Background(DetectorFrame):
         hdulist.close()
 
         if caldb is not None:
-            self.caldb = caldb
-            self.caldb.create_entry(self)
-            self.caldb.save()
-
+            caldb.create_entry(self)
+            caldb.save()
 
 class BadPixelMap(DetectorFrame):
     """
@@ -286,9 +284,8 @@ class BadPixelMap(DetectorFrame):
         super().save(filename=filename, filedir=filedir)
 
         if caldb is not None:
-            self.caldb = caldb
-            self.caldb.create_entry(self)
-            self.caldb.save()
+            caldb.create_entry(self)
+            caldb.save()
 
 
     def mark_bad(self, frame):
@@ -389,9 +386,8 @@ class TraceParams(BasicData):
         hdulist.close()
 
         if caldb is not None:
-            self.caldb = caldb
-            self.caldb.create_entry(self)
-            self.caldb.save()
+            caldb.create_entry(self)
+            caldb.save()
 
     def copy(self):
         """
@@ -503,14 +499,38 @@ class Wavecal(BasicData):
 
     Attributes:
         wvs: corresponding wavelengths if calibrated. (N_traces x N_orders x N_columns)
+        method (str): method for wavecal. Can be "Star", "Telluric", "Arc"
     """
     type = "wavecal"
 
-    def __init__(self, wvs=None, header=None, filepath=""):
+    def __init__(self, wvs=None, header=None, labels=None, method=None, filepath=""):
         super().__init__(wvs, header, filepath)
         self.wvs = self.data
 
-    def save(self, filename=None, filedir=None):
+        # grab labels for each fiber
+        if labels is not None:
+            if len(labels) != self.wvs.shape[0]:
+                raise ValueError("There are {0} traces but {1} labels are passed in".format(self.wvs.shape[0], len(labels)))
+            self.labels = labels
+        else:
+            num_fibs = self.wvs.shape[0]
+            self.labels = []
+            for i in range(num_fibs):
+                self.labels.append(self.header['FIB{0}'.format(i)])
+
+        # check what type of wavecal this is
+        if method is not None:
+            self.method = method
+        else:
+            try:
+                self.method = self.header['WVMETHOD']
+            except KeyError:
+                print("Warning: wavecal {0} does not have method documented".format(filepath))
+                self.method = "UNKNOWN"
+
+        
+
+    def save(self, filename=None, filedir=None, caldb=None):
         """
         Save file to disk with user specified filepath
 
@@ -521,4 +541,13 @@ class Wavecal(BasicData):
         self.header['ISCALIB'] = True
         self.header['CALIBTYP'] = "Wavecal"
 
+        for i, label in enumerate(self.labels):
+            self.header['FIB{0}'.format(i)] = label
+
+        self.header['WVMETHOD'] = self.method
+
         super().save(filename=filename, filedir=filedir)
+
+        if caldb is not None:
+            caldb.create_entry(self)
+            caldb.save()

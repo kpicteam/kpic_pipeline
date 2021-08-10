@@ -4,7 +4,7 @@ import configparser
 import pathlib
 from astropy.time import Time
 import numpy as np
-from kpicdrp.data import BadPixelMap, Background, TraceParams, DetectorFrame
+from kpicdrp.data import BadPixelMap, Background, TraceParams, DetectorFrame, Wavecal
 from fnmatch import fnmatch
 
 
@@ -39,7 +39,7 @@ class CalDB():
         else:
             raise ValueError("Filepath and column_names cannot both be blank.")
 
-    # split up filepath into filename and filedir
+        # split up filepath into filename and filedir
         filepath_args = filepath.split(os.path.sep)
         if len(filepath_args) == 1:
             # no directory info in filepath, so current working directory
@@ -108,14 +108,14 @@ class DetectorCalDB(CalDB):
     """
     def __init__(self, filepath=""):
         if len(filepath)==0:
-            self.columns = ["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds","# of Files Used"]
+            self.columns = ["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds", "# of Files Used", "Echelle Position", "X-Disperser Position"]
             self.db = pd.DataFrame(columns = self.columns)
         elif len(filepath) > 0: 
             self.filepath = filepath
             self.db = pd.read_csv(filepath) 
             self.columns = list(self.db.columns.values)
 
-        if self.columns !=["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds","# of Files Used"]:
+        if self.columns !=["Filepath", "Type","Date/Time of Obs.", "Integration Time", "Coadds", "# of Files Used", "Echelle Position", "X-Disperser Position"]:
             raise ValueError("This is not a DetectorCalDB. Please use a different type of database.")
         
         filepath_args = filepath.split(os.path.sep)
@@ -140,9 +140,9 @@ class DetectorCalDB(CalDB):
     
         if os.path.abspath(entry.filepath) in self.db.values:
             row_index= self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
-            self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]
+            self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"],entry.header["ECHLPOS"],entry.header["DISPPOS"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"]]], columns = self.columns), ignore_index = True)
+            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"],entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
 
     def get_calib(self, file, type=""):
         """
@@ -174,7 +174,7 @@ class DetectorCalDB(CalDB):
 
         elif self.type == "Background":
             self.calibdf = self.db[self.db["Type"]=="bkgd"]
-            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]) & (self.calibdf["# of Files Used"] > 1))]
+            self.options = self.calibdf.loc[((self.calibdf["Integration Time"] == file.header["TRUITIME"]) & (self.calibdf["Coadds"] == file.header["Coadds"]) & (self.calibdf["# of Files Used"] > 1) & (self.db["Echelle Position"] == file.header["ECHLPOS"]) & (self.db["X-Disperser Position"] == file.header["DISPPOS"]))]
             options = self.options.copy()
             options["Date/Time of Obs."]=pd.to_datetime(options["Date/Time of Obs."])
             MJD_time = Time(options["Date/Time of Obs."]).mjd
@@ -322,6 +322,107 @@ class TraceCalDB(CalDB):
         return TraceParams(filepath=calib_filepath)
 
 
+class WaveCalDB(CalDB):
+    """
+    A subclass of CalDB specialized for Wavelength solutions
+
+    Args:
+        filepath (str): filepath to a CSV file with an existing WaveCalDB database
+    """
+    def __init__(self, filepath=""):
+        if len(filepath)==0:
+            self.columns = ["Filepath", "Method", "Date/Time of Obs.", "s1", "s2", "s3", "s4", "c0", "c1", "Echelle Position", "X-Disperser Position"]
+            self.db = pd.DataFrame(columns = self.columns)
+        elif len(filepath) > 0: 
+            self.filepath = filepath
+            self.db = pd.read_csv(filepath) 
+            self.columns = list(self.db.columns.values)
+
+        if self.columns != ["Filepath", "Method", "Date/Time of Obs.", "s1", "s2", "s3", "s4", "c0", "c1", "Echelle Position", "X-Disperser Position"]:
+            raise ValueError("This is not a DetectorCalDB. Please use a different type of database.")
+        
+        filepath_args = filepath.split(os.path.sep)
+        if len(filepath_args) == 1:
+            # no directory info in filepath, so current working directory
+            self.filedir = "."
+            self.filename = filepath_args[0]
+        else:
+            self.filename = filepath_args[-1]
+            self.filedir = os.path.sep.join(filepath_args[:-1])
+
+    def create_entry(self, entry):
+        """
+        Add or update an entry in WaveCalDB
+        Each entry has 11 values
+        
+        Args:
+            entry (Background or BadPixelMap obj): entry to be added or updated in database
+        """
+        if not isinstance(entry, (Wavecal)):
+            raise ValueError("Entry needs to be instance of Wavecal")
+
+        if "s1" in entry.labels:
+            s1_val = True
+        else:
+            s1_val = False
+        
+        if "s2" in entry.labels:
+            s2_val = True
+        else:
+            s2_val = False
+
+        if "s3" in entry.labels:
+            s3_val = True
+        else:
+            s3_val = False
+        
+        if "s4" in entry.labels:
+            s4_val = True
+        else:
+            s4_val = False
+        
+        if "c0" in entry.labels:
+            c0_val = True
+        else:
+            c0_val = False
+
+        if "c1" in entry.labels:
+            c1_val = True
+        else:
+            c1_val = False
+
+        if os.path.abspath(entry.filepath) in self.db.values:
+            row_index= self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
+            self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.method, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]
+        else:
+            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.method, entry.time_obs, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
+
+    def get_calib(self, file):
+        """
+        Outputs the best Wavecal for a given science file
+
+        Args:
+            file (DetectorFrame object): raw data file to get calibration for
+        
+        Fields:
+            calibdf (pd dataframe): database that holds all badpixmap or all background frames
+            options (pd dataframe): database that holds all files that could be used for calibration (same Integration Time, Coadds and >1 # of Files Used)
+        """
+
+        self.options = self.db.loc[((self.db["Echelle Position"] == file.header["ECHLPOS"]) & (self.db["X-Disperser Position"] == file.header["DISPPOS"]))]
+        options = self.options.copy()
+        options["Date/Time of Obs."]=pd.to_datetime(options["Date/Time of Obs."])
+        MJD_time = Time(options["Date/Time of Obs."]).mjd
+                 
+        file_time = Time(file.time_obs).mjd
+
+        result_index = np.abs(MJD_time-file_time).argmin() 
+        calib_filepath = options.iloc[result_index,0]
+
+        return Wavecal(filepath=calib_filepath)
+    
+
+
 # load ca
 def load_caldb_fromdisk():
     """
@@ -357,6 +458,14 @@ def load_caldb_fromdisk():
     else:
         trace_db = TraceCalDB(filepath=tracedb_filepath)
 
-    return det_db, trace_db
+    # wavecal caldb
+    wavecaldb_filepath = os.path.join(caldb_path, "caldb_wavecal.csv")
+    if not os.path.exists(wavecaldb_filepath):
+        wavecal_db = WaveCalDB()
+        wavecal_db.save(filedir=caldb_path, filename="caldb_wavecal.csv")
+    else:
+        wavecal_db = WaveCalDB(filepath=wavecaldb_filepath)
+
+    return det_db, trace_db, wavecal_db
     
-det_caldb, trace_caldb = load_caldb_fromdisk()
+det_caldb, trace_caldb, wave_caldb = load_caldb_fromdisk()

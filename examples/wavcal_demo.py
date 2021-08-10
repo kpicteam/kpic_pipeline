@@ -8,6 +8,7 @@ from scipy.interpolate import RegularGridInterpolator
 import kpicdrp.wavecal as wavecal
 import kpicdrp.utils as utils
 import kpicdrp.data as data
+from kpicdrp.caldb import trace_caldb, wave_caldb
 import pandas as pd
 from scipy.interpolate import interp1d
 
@@ -15,13 +16,12 @@ from scipy.interpolate import interp1d
 
 ## Change local directory
 kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
-kpicpublicdir = "../public_kpic_data"
 
 ## Path relative to the public kpic directory
 filelist_spectra = glob(os.path.join(kpicpublicdir, "20200928_HIP_95771","fluxes", "*bkgdsub_spectra.fits"))
 mytrfilename = os.path.join(kpicpublicdir,"20200928_zet_Aql","calib","nspec200928_0049_trace.fits")
 
-filename_oldwvs = os.path.join(kpicpublicdir, "utils", "first_guess_wvs_2020928_HIP_81497.fits")
+filename_oldwvs = os.path.join(kpicpublicdir, "utils", "first_guess_wvs_20200928_HIP_81497.fits")
 filename_phoenix_rvstandard = os.path.join(kpicpublicdir, "utils", "HIP_81497_lte03600-1.00-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits")
 filename_phoenix_wvs =os.path.join(kpicpublicdir, "utils", "WAVE_PHOENIX-ACES-AGSS-COND-2011.fits")
 
@@ -43,7 +43,7 @@ target_rv = -85.391 # HIP_95771: -85.391km/s ; HIP_81497: -55.567 #km/s
 N_nodes_wvs=6 # Number of spline nodes for the wavelength solution
 blaze_chunks=5 # Number of chunks of the "blaze profile" (modeled as a piecewise linear function)
 init_grid_search = True # do a rough grid search of the wavcal before running optimizer
-init_grid_dwv = 3e-4#3e-4 #microns, how far to go for the grid search. Caution: It can take quite a while!
+init_grid_dwv = 1e-4#3e-4 #microns, how far to go for the grid search. Caution: It can take quite a while!
 fringing = False
 numthreads = 2
 # mypool = mp.Pool(processes=numthreads)
@@ -53,14 +53,10 @@ mypool = None
 # hdulist = fits.open(filename_oldwvs)
 # old_wvs = hdulist[0].data
 old_wvsoln = data.Wavecal(filepath=filename_oldwvs)
-old_wvsoln.wvs[1] = old_wvsoln.wvs[0]
-old_wvsoln.wvs[2] = old_wvsoln.wvs[0]
-old_wvsoln.wvs[3] = old_wvsoln.wvs[0]
-
-
-trace_dat = data.TraceParams(filepath=mytrfilename)
 
 spectral_dataset = data.Dataset(filelist=filelist_spectra, dtype=data.Spectrum)
+
+trace_dat = trace_caldb.get_calib(spectral_dataset[0])
 
 # combine spectral dataset together to a single specrum per fiber
 combined_spectrum = utils.stellar_spectra_from_files(spectral_dataset)
@@ -85,6 +81,7 @@ with fits.open(filename_phoenix_rvstandard) as hdulist:
 new_wvs_arr = np.zeros(combined_spectrum.data.shape)
 line_width_func_list = utils.linewidth2func(trace_dat.widths[trace_dat.get_sci_indices()], old_wvsoln.wvs)
 
+fib_labels = []
 for fib in range(combined_spectrum.fluxes.shape[0]):
     if np.nansum(combined_spectrum.fluxes[fib,:,:])==0:
         continue
@@ -148,6 +145,7 @@ for fib in range(combined_spectrum.fluxes.shape[0]):
         print(out_paras)
 
     new_wvs_arr[fib,:,:] = new_wvs_fib
+    fib_labels.append(combined_spectrum.labels[fib])
 
     plt.figure(fib+1,figsize=(12,12))
     ax_list = utils.plot_kpic_spectrum(combined_spectrum.fluxes[fib,:,:] ,wvs=new_wvs_fib, arr_err=combined_spectrum.errs[fib,:,:],color="blue",label="data")
@@ -158,8 +156,8 @@ for fib in range(combined_spectrum.fluxes.shape[0]):
     # plt.show()
 
 
-new_wvs = data.Wavecal(wvs=new_wvs_arr, header=combined_spectrum.header, filepath=out_filename)
-new_wvs.save()
+new_wvs = data.Wavecal(wvs=new_wvs_arr, header=combined_spectrum.header, labels=fib_labels, method="Star", filepath=out_filename)
+new_wvs.save(caldb=wave_caldb)
 
 plt.show()
 
