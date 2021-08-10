@@ -104,7 +104,8 @@ def simple_xcorr(shifts, orders_wvs, orders_fluxes, template_wvs, template_fluxe
     return ccf, acf
 
 
-def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses=None):
+def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes,
+               template_wvs, template_fluxes, orders_responses=None):
     """
     Estimate the flux of the planet using lsqr analysis as a function of shift. 
 
@@ -113,17 +114,17 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         orders_wvs: (Norders, Nchannels) array of wavelengths
         orders_fluxes: (Norders, Nchannels) array of fluxes
         star_wvs: np.array of wvs for star template
-        star_template_fluxes: np.arraay of fluxes for star template
+        star_template_fluxes: np.array of fluxes for star template
         template_wvs: np.array of wvs for the plnaet template
         template_fluxes: np.array of fluxes for the plnaet template
         orders_responses (Norders, Nchannels) array of spectral responses
 
     Returns:
-        ccf: cross correlation with the planet template with the data
+        ccf: cross correlation of the planet template with the data
         acf: autocorrelation of the plaent data
-        star_cf: cross correlation of the planet template with the star template
+        star_pl_cf: cross correlation of the planet template with the star template
+        star_cf: cross correlation of the star template with the data
     """
-
 
     norm_model = template_fluxes / np.nanmedian(template_fluxes)
     norm_star = star_template_fluxes / np.nanmedian(star_template_fluxes)
@@ -131,12 +132,11 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
     fluxes = []
     star_fluxes = []
     acf_fluxes = []
-
+    star_pl_fluxes = []
 
     for shift in shifts:
         new_beta = shift/consts.c.to(u.km/u.s).value 
         new_redshift = np.sqrt((1 + new_beta)/(1 - new_beta)) - 1
-
 
         all_pl_template = []
         all_pl_noshift_template = []
@@ -203,14 +203,43 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         results_star = optimize.lsq_linear(A_matrix, all_star_template)
 
         fluxes.append(results.x[0])
-        star_fluxes.append(results_star.x[0])
+        star_fluxes.append(results.x[1])
+
+        star_pl_fluxes.append(results_star.x[0])
         acf_fluxes.append(results_noshift.x[0])
         
-    return np.array(fluxes), np.array(acf_fluxes), np.array(star_fluxes)
+    return np.array(fluxes), np.array(acf_fluxes), np.array(star_pl_fluxes), np.array(star_fluxes)
 
-def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses, broadened=False):
+def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas,
+                    star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses,
+                    broadened=False, output_single_models=False):
+    """
+        Generates a forward model of the data from planet template, on-axis star flux,
+        instrument response, and the trace width (for the instrument resolution)
+        For details see Sec. 4.1 of Wang+2021 (on HR 8799)
+
+        Args:
+            fitparams: rvshift, vsini, pl_flux, star_flux, in that order
+            orders_wvs: (Norders, Nchannels) array of wavelengths
+            orders_fluxes: (Norders, Nchannels) array of fluxes
+            star_wvs: np.array of wvs for star template
+            star_template_fluxes: np.array of fluxes for star template
+            template_wvs: np.array of wvs for the plnaet template
+            template_fluxes: np.array of fluxes for the plnaet template
+            orders_responses: (Norders, Nchannels) array of spectral responses
+            broadened: whether the planet template has been broadened
+            output_single_models: option to return a separate planet template and star template
+
+        Returns:
+            if output_single_models = False (by default):
+                template: full forward model
+            if output_single_models = True:
+                template: full forward model
+                planet_model: planet template broadened to instrument resolution
+                star_model: star template multiplied by scaling factor
+        """
+
     rvshift, vsini, pl_flux, star_flux = fitparams
-
 
     if not broadened:
         if vsini < 0:
@@ -221,18 +250,14 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star
     else:
         broad_model = template_fluxes
 
-
-
     thiswvs = orders_wvs
     star_template = np.interp(thiswvs, star_wvs, star_template_fluxes)
     star_template /= np.nanpercentile(star_template, 90)
 
-
     new_beta =(rvshift)/consts.c.to(u.km/u.s).value #+  (rel_v)/consts.c.to(u.km/u.s).value
     new_redshift = np.sqrt((1 + new_beta)/(1 - new_beta)) - 1
 
-    template_wvs_starframe = template_wvs/(1+new_redshift) 
-
+    template_wvs_starframe = template_wvs/(1+new_redshift)
 
     # model_r = np.median(template_wvs/np.median(template_wvs - np.roll(template_wvs, 1)))
     # data_r = 35000
@@ -242,23 +267,29 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas, star
     template = np.interp(template_wvs_starframe, template_wvs, broad_model)
     template /= np.nanpercentile(template, 90)
 
-    # broaden to instrumental resolution 
+    # broaden to instrumental resolution
     template = convolve_and_sample(thiswvs, order_sigmas, template_wvs, template)
 
-    resp_template = orders_responses
-
-
-    template *= resp_template 
-
-    template *= pl_flux
+    # scale the on-axis stellar fluxes
     star_template *= star_flux
 
+    # option to return break up of planet & star models
+    if output_single_models:
+        planet_model = np.copy(template*pl_flux)
+        star_model = np.copy(star_template)
+
+    # multiply the instrument response
+    resp_template = orders_responses
+    template *= resp_template
+
+    # scale by planet flux level and add speckle contribution
+    template *= pl_flux
     template += star_template
 
-
-    return template
-
-
+    if output_single_models:
+        return template, planet_model, star_model
+    else:
+        return template
 
 def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_template_fluxes, template_wvs, template_fluxes, orders_responses):
         
@@ -338,13 +369,13 @@ def lsqr_fit(guess, orders, orders_wvs, orders_sigmas, orders_fluxes, orders_flu
         broad_model = pyasl.rotBroad(template_wvs, template_fluxes, 0.1, vsini)
 
 
-
         for i, order in enumerate(orders):
             contrast, star_flux = fitparams[2*i+2:2*i+4]
 
             this_fitparams = [shift, vsini, contrast, star_flux]
 
-            model_orders = generate_forward_model_singleorder(this_fitparams, orders_wvs[order], orders_sigmas[order], star_wvs, star_template_fluxes, template_wvs, broad_model, orders_responses[order], broadened=True)
+            model_orders = generate_forward_model_singleorder(this_fitparams, orders_wvs[order],
+                                    orders_sigmas[order], star_wvs, star_template_fluxes, template_wvs, broad_model, orders_responses[order], broadened=True)
             
             good = np.where(~np.isnan(model_orders))
             model_orders = model_orders[good]
@@ -389,7 +420,7 @@ def convolve_and_sample(wv_channels, sigmas, model_wvs, model_fluxes, channel_wi
     """
     # create the wavelength grid for variable LSF convolution
     dwv = np.abs(wv_channels - np.roll(wv_channels, 1))
-    dwv[0] = dwv[1] # edge case
+    dwv[0] = dwv[1]  # edge case
     sigmas_wvs = sigmas * dwv
     #filter_size_wv = int(np.ceil(np.max(sigmas_wvs))) * 6 # wavelength range to filter
 

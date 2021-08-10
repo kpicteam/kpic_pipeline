@@ -160,4 +160,3 @@ new_wvs = data.Wavecal(wvs=new_wvs_arr, header=combined_spectrum.header, labels=
 new_wvs.save(caldb=wave_caldb)
 
 plt.show()
-
