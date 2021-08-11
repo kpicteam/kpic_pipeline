@@ -103,7 +103,16 @@ if 1:  # plot
     plt.figure(2)
     for order_id in range(9):
         for fib in range(trace_loc.shape[0]):
-            plt.plot(trace_loc[fib, order_id, :], label="fibers", color="cyan", linestyle="-", linewidth=1)
-            # plt.plot(trace_loc_slit[fib, order_id, :], label="fibers", color="grey", linestyle="--", linewidth=1)
-            # plt.plot(trace_loc_dark[fib, order_id, :], label="fibers", color="black", linestyle="--", linewidth=1)
+            label = smooth_trace_calib.labels[fib]
+            if 's' in label:
+                color = 'cyan'
+                linestyle = '-'
+            elif 'b' in label:
+                color = 'grey'
+                linestyle = "--"
+            elif 'd' in label:
+                color = 'black'
+                linestyle = "--"
+            plt.plot(trace_loc[fib, order_id, :], label="fibers", color=color, linestyle=linestyle, linewidth=1)
+
     plt.show()
