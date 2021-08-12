@@ -46,8 +46,8 @@ init_grid_search = True # do a rough grid search of the wavcal before running op
 init_grid_dwv = 1e-4#3e-4 #microns, how far to go for the grid search. Caution: It can take quite a while!
 fringing = False
 numthreads = 2
-# mypool = mp.Pool(processes=numthreads)
-mypool = None
+mypool = mp.Pool(processes=numthreads)
+# mypool = None
 
 # Read an old wavelength array to be used as the first guess
 # hdulist = fits.open(filename_oldwvs)
