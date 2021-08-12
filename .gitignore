@@ -2,3 +2,4 @@ public_kpic_data/*
 kpicdrp.egg-info/*
 *.pyc
 examples/*.fits
+caldb_*.csv
