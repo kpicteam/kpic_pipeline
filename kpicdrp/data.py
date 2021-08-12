@@ -516,7 +516,11 @@ class Wavecal(BasicData):
             num_fibs = self.wvs.shape[0]
             self.labels = []
             for i in range(num_fibs):
-                self.labels.append(self.header['FIB{0}'.format(i)])
+                try:
+                    self.labels.append(self.header['FIB{0}'.format(i)])
+                except KeyError:
+                    print("Warning: Keyword FIB{0} not found in header. Guessing this is s{1}".format(i,i+1))
+                    self.labels.append("s{0}".format(i+1))
 
         # check what type of wavecal this is
         if method is not None:
