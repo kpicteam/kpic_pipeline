@@ -15,43 +15,88 @@ import kpicdrp.data as data
 
 gain = 3.03 # e-/ADU
 
-def add_baryrv_to_header(header):
+def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction=False, fiber_goals=None, pairsub=False):
     """
-    Add barycentric rv to fits headers of extracted frames
-    copied from JB's extraction code
-    """
-    out_header = copy.copy(header)
-    keck = EarthLocation.from_geodetic(lat=19.8283 * u.deg, lon=-155.4783 * u.deg, height=4160 * u.m)
-    sc = SkyCoord(float(header["CRVAL1"]) * u.deg, float(header["CRVAL2"]) * u.deg)
-    barycorr = sc.radial_velocity_correction(obstime=Time(float(header["MJD"]), format="mjd", scale="utc"),
-                                             location=keck)
-    out_header["BARYRV"] = barycorr.to(u.km / u.s).value
-
-    return out_header
-
-def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, scale=True, add_baryrv=True):
-    """
-    Does simple processing to the raw spectroscopic data: bkgd subtraction, bad pixels, cosmic rays
+    Does simple pre-processing to the raw spectroscopic data: bkgd subtraction, bad pixels, cosmic rays
 
     Args:
         raw_frames (data.Dataset): dataset of raw detector frames to process
         bkgd (data.Background): 2-D bkgd frame for subtraction
         badpixmap (data.BadPixelMap): 2-D bad pixel map
         detect_cosmics (bool): if True, runs a cosmic ray rejection algorithm on each image
-        scale (bool): if True, scales the background to try to match the science frame.
         add_baryrv (bool): If True, add barycentric RV to the header
+        nod_subtraction (bool): if True, replaces 2-D bkgd frame subtraction with nod subtraction using adjacent raw_frames
+        fiber_goals (list): list of N_frames corresponding to the fiber goal for each frame. Automatically tries to figure out from headers otherwise
+        pairsub (bool): if True, groups frames into pairs and does subtraction, otherwise looks at both adjacent pairs
 
     Returns:
         processed_dataset (data.Dataset): a new dataset with basic 2D data processing performed 
     """
+    processed_dataset = correct_bad_pixels(raw_frames, badpixmap, detect_cosmics=detect_cosmics)
+
+    if add_baryrv:
+        processed_dataset = add_baryrv_to_header(processed_dataset, copy=False)
+
+    if not nod_subtraction:
+        processed_dataset = simple_bkgd_subtraction(processed_dataset, bkgd, copy=False)
+    else:
+        processed_dataset = nod_subtract(processed_dataset, fiber_goals=fiber_goals, pairsub=pairsub, copy=False)
+
+    return processed_dataset
+
+
+def add_baryrv_to_header(frames, copy=True):
+    """
+    Add barycentric rv to fits headers of extracted frames
+    copied from JB's extraction code
+
+    Args:
+        frames (data.Dataset): dataset to modify
+        copy (bool): if True, modifies copies of input data
+    """
     processed_data = []
-    # iterate over images from the same fiber
+    for frame in frames:
+        if copy:
+            out_header = frame.header.copy()
+        else:
+            out_header = frame.header
+
+        keck = EarthLocation.from_geodetic(lat=19.8283 * u.deg, lon=-155.4783 * u.deg, height=4160 * u.m)
+        sc = SkyCoord(float(out_header["CRVAL1"]) * u.deg, float(out_header["CRVAL2"]) * u.deg)
+        barycorr = sc.radial_velocity_correction(obstime=Time(float(out_header["MJD"]), format="mjd", scale="utc"),
+                                                location=keck)
+        out_header["BARYRV"] = barycorr.to(u.km / u.s).value
+
+        tnow = Time.now()
+        out_header['HISTORY'] = "[{0}] Calculated barycentric RV".format(str(tnow))
+
+        new_frame = data.DetectorFrame(data=frame.data, header=out_header, filepath=frame.filepath)
+
+        processed_data.append(new_frame)
+    
+    processed_dataset = data.Dataset(processed_data)
+
+    return processed_dataset
+
+
+def correct_bad_pixels(raw_frames, badpixmap, detect_cosmics=True, copy=True):
+    """
+    Performs bad pixel correction based on bad pixel map and looks for cosmic rays
+
+    Args:
+        raw_frames (data.Dataset): dataset of raw detector frames to process
+        badpixmap (data.BadPixelMap): 2-D bad pixel map
+        detect_cosmics (bool): if True, runs a cosmic ray rejection algorithm on each image
+        copy (bool): if True, modifies copies of input data
+    """
+    processed_data = []
     for frame in raw_frames:
-        new_hdr = frame.header.copy()
-        new_data = np.copy(frame.data)
-            
-        if add_baryrv:
-            new_hdr = add_baryrv_to_header(new_hdr)
+        if copy:
+            new_hdr = frame.header.copy()
+            new_data = np.copy(frame.data)
+        else:
+            new_hdr = frame.header
+            new_data = frame.data
 
         if detect_cosmics:
             badpixmap4cosmic = np.zeros(badpixmap.data.shape)
@@ -60,17 +105,107 @@ def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, scale=Tr
             new_data[dat_crmap] = np.nan
         new_data[np.where(np.isnan(badpixmap.data))] = np.nan
 
-        # subtract background
+        tnow = Time.now()
+        new_hdr['HISTORY'] = "[{0}] Masked {2} bad pixels using badpixelmap {1}".format(str(tnow), badpixmap.filename, np.size(np.where(np.isnan(badpixmap.data))))
+
+        new_frame = data.DetectorFrame(data=new_data, header=new_hdr, filepath=frame.filepath)
+
+        processed_data.append(new_frame)
+    
+    processed_dataset = data.Dataset(processed_data)
+
+    return processed_dataset
+
+
+def simple_bkgd_subtraction(raw_frames, bkgd, scale=False, copy=True):
+    """
+    Performs simple background subtraciton using a reference background frame. 
+        
+    Args:
+        raw_frames (data.Dataset): dataset of raw detector frames to process
+        bkgd (data.Background): 2-D bkgd frame for subtraction
+        pairsub (bool): if True, groups frames into pairs and does subtraction, otherwise looks at both adjacent pairs
+        copy (bool): if True, modifies copies of input data
+
+    """
+    processed_data = []
+    for frame in raw_frames:
+        if copy:
+            new_hdr = frame.header.copy()
+        else:
+            new_hdr = frame.header
+
         if scale:
-            scale_factor = (np.nanmedian(new_data)/np.nanmedian(bkgd.data))
+            scale_factor = (np.nanmedian(frame.data)/np.nanmedian(bkgd.data))
         else:
             scale_factor = 1
 
-        new_data -= bkgd.data * scale_factor
+        new_data = frame.data - (bkgd.data * scale_factor)
+        
+        tnow = Time.now()
+        new_hdr['HISTORY'] = "[{0}] Subtracted thermal background frame {1}".format(str(tnow), bkgd.filename)
 
         new_frame = data.DetectorFrame(data=new_data, header=new_hdr, filepath=frame.filepath)
         new_frame.filename = new_frame.filename[:-5] + "_bkgdsub.fits"
 
+        processed_data.append(new_frame)
+    
+    processed_dataset = data.Dataset(processed_data)
+
+    return processed_dataset
+
+def nod_subtract(raw_frames, fiber_goals=None, pairsub=False, copy=True):
+    """
+    Performs nod subtraction by using adjacent frames 
+
+    Args:
+        raw_frames (data.Dataset): dataset of raw detector frames to process
+        fiber_goals (list): list of N_frames corresponding to the fiber goal for each frame
+        pairsub (bool): if True, groups frames into pairs and does subtraction, otherwise looks at both adjacent pairs
+        copy (bool): if True, modifies copies of input data
+    """ 
+    if fiber_goals is None:
+        fiber_goals = raw_frames.get_header_values("GOALNM")
+    
+    # group frames by fiber goal
+    group_index = 0
+    fiber_groups = np.zeros(len(fiber_goals))
+    curr_group = fiber_goals[0]
+    for i in range(len(raw_frames)):
+        if fiber_goals[i] != curr_group:
+            group_index += 1
+        fiber_groups[i] = group_index
+    
+    processed_data = []
+    for i in range(len(raw_frames)):
+        # figure out which frames to use
+        if not pairsub:
+            good_frames = np.where(np.abs(fiber_groups - fiber_groups[i]) == 1)
+        else:
+            if fiber_groups[i] % 2 == 0:
+                pair_index = fiber_groups[i] + 1
+                # if somehow there is an odd number of groups, make the last pair as an exception
+                if pair_index > fiber_groups.max():
+                    pair_index -= 2
+            else:
+                pair_index = fiber_groups[i] - 1
+            good_frames = np.where(fiber_groups == pair_index)
+        
+        bkgd = np.nanmean(raw_frames[good_frames].get_dataset_attributes('data'), axis=0)
+        files_used = raw_frames[good_frames].get_dataset_attributes('filename')
+
+        new_frame = raw_frames[i].data - bkgd
+
+        if copy:
+            output_hdr = raw_frames[i].header.copy()
+        else:
+            output_hdr = raw_frames[i].header
+
+        tnow = Time.now()
+        new_frame = data.DetectorFrame(data=new_frame, header=output_hdr, filepath=raw_frames[i].filepath)
+        new_frame.filename = new_frame.filename[:-5] + "_nodsub.fits"
+        new_frame.header['HISTORY'] = "[{0}] Performed nod background subtraction with the following frames: {1}".format(str(tnow), " ".join(files_used))
+        
         processed_data.append(new_frame)
 
     processed_dataset = data.Dataset(processed_data)

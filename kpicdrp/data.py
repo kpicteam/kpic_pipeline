@@ -26,7 +26,7 @@ class BasicData():
         header: corresponding header
         filename (str): filepath that corresponds to the data (where it is read/written)
         type (str): kind of data in string representation
-        time_obs (astropy.time): time that data was taken
+        time_obs (astropy.time.Time): time that data was taken
         filesuffix (str): 
     """
     type = "base"
