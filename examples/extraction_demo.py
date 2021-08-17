@@ -50,10 +50,10 @@ trace_dat = data.TraceParams(filepath=trace_caldb.db['Filepath'][0])
 if 'b1' not in trace_dat.labels:
     trace_dat = trace.get_background_traces(trace_dat)
 
-sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=False)
+sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=True)
 
 
-spectral_dataset = extraction.extract_flux(sci_dataset, trace_dat, fit_background=True, bad_pixel_fraction=0.01, pool=None)
+spectral_dataset = extraction.extract_flux(sci_dataset, trace_dat, fit_background=True, bad_pixel_fraction=0.01, pool=mypool)
 
 spectral_dataset.save(filedir=out_flux_dir)
 
