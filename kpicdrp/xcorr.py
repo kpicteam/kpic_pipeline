@@ -111,13 +111,13 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
 
     Args:
         shifts: np.array of shifts in km/s
-        orders_wvs: (Norders, Nchannels) array of wavelengths
-        orders_fluxes: (Norders, Nchannels) array of fluxes
-        star_wvs: np.array of wvs for star template
-        star_template_fluxes: np.array of fluxes for star template
-        template_wvs: np.array of wvs for the plnaet template
-        template_fluxes: np.array of fluxes for the plnaet template
-        orders_responses (Norders, Nchannels) array of spectral responses
+        orders_wvs: (Norders, Nchannels) or (Nfibers, Norders, Nchannels) array of wavelengths
+        orders_fluxes: (Norders, Nchannels) or (Nfibers, Norders, Nchannels) array of fluxes
+        star_wvs: np.array of wvs for star template, or list of np.array of wvs if multiple fibers as passed in
+        star_template_fluxes: np.array of fluxes for star template, or list of np.array for multiple fibers
+        template_wvs: np.array of wvs for the plnaet template, or list of np.array
+        template_fluxes: np.array of fluxes for the plnaet template, or list of np.array
+        orders_responses (Norders, Nchannels) or (Nfibers, Norders, Nchannels) array of spectral responses
 
     Returns:
         ccf: cross correlation of the planet template with the data
@@ -126,13 +126,23 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         star_cf: cross correlation of the star template with the data
     """
 
-    norm_model = template_fluxes / np.nanmedian(template_fluxes)
-    norm_star = star_template_fluxes / np.nanmedian(star_template_fluxes)
+    if len(orders_wvs.shape) == 2:
+        # no Nfibers passed in so make it
+        orders_wvs = orders_wvs.reshape([1, orders_wvs.shape[0], orders_wvs.shape[1] ])
+        orders_fluxes = orders_fluxes.reshape([1, orders_fluxes.shape[0], orders_fluxes.shape[1] ])
+        star_wvs = [star_wvs,]
+        star_template_fluxes = [star_template_fluxes, ]
+        template_wvs = [template_wvs,]
+        template_fluxes = [template_fluxes,]
+        orders_responses = orders_responses.reshape([1, orders_responses.shape[0], orders_responses.shape[1] ])
 
     fluxes = []
     star_fluxes = []
     acf_fluxes = []
     star_pl_fluxes = []
+
+    norm_model = [template / np.nanmedian(template) for template in template_fluxes]
+    norm_star = [star_template / np.nanmedian(star_template) for star_template in star_template_fluxes]
 
     for shift in shifts:
         new_beta = shift/consts.c.to(u.km/u.s).value 
@@ -142,59 +152,64 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         all_pl_noshift_template = []
         all_star_template = []
         all_data = []
+        fib_ids = []
         order_ids = []
 
-        for i in range(orders_wvs.shape[0]):    
-            thiswvs = orders_wvs[i]
-            order = orders_fluxes[i]
-            wvs_starframe = thiswvs/(1+new_redshift)
-            
-            if orders_responses is not None:
-                resp_template = orders_responses[i]
-            else:
-                resp_template = 1
-            
-            order_copy = np.copy(order)
-            order_mask = np.where(np.isnan(order))
-            order_copy[order_mask] = np.nanmedian(order)
-            order_continuum = ndi.median_filter(order_copy, 100)
-            order_copy = order - order_continuum + np.nanmedian(order_continuum)
-            order_copy[order_mask] = np.nan
+        for fib in range(orders_wvs.shape[0]):
+            for i in range(orders_wvs.shape[1]):    
+                thiswvs = orders_wvs[fib, i]
+                order = orders_fluxes[fib, i]
+                wvs_starframe = thiswvs/(1+new_redshift)
+                
+                if orders_responses is not None:
+                    resp_template = orders_responses[fib, i]
+                else:
+                    resp_template = 1
+                
+                order_copy = np.copy(order)
+                order_mask = np.where(np.isnan(order))
+                order_copy[order_mask] = np.nanmedian(order)
+                order_continuum = ndi.median_filter(order_copy, 100)
+                order_copy = order - order_continuum + np.nanmedian(order_continuum)
+                order_copy[order_mask] = np.nan
 
-            template = np.interp(wvs_starframe, template_wvs, norm_model) * resp_template
-            template_mask = np.where(np.isnan(template))
-            template[template_mask] = np.nanmedian(template)
-            template_continuum = ndi.median_filter(template, 100)
-            template = (template - template_continuum) + np.median(template_continuum)
-            template[template_mask] = np.nan
+                template = np.interp(wvs_starframe, template_wvs[fib], norm_model[fib]) * resp_template
+                template_mask = np.where(np.isnan(template))
+                template[template_mask] = np.nanmedian(template)
+                template_continuum = ndi.median_filter(template, 100)
+                template = (template - template_continuum) + np.median(template_continuum)
+                template[template_mask] = np.nan
 
 
-            template_noshift = np.interp(thiswvs, template_wvs, norm_model) * resp_template
-            template_noshift_mask = np.where(np.isnan(template_noshift))
-            template_noshift[template_noshift_mask] = np.nanmedian(template_noshift)
-            template_noshift_continuum = ndi.median_filter(template_noshift, 100)
-            template_noshift = (template_noshift - template_noshift_continuum) + np.median(template_noshift_continuum)
-            template_noshift[template_noshift_mask] = np.nan
+                template_noshift = np.interp(thiswvs, template_wvs[fib], norm_model[fib]) * resp_template
+                template_noshift_mask = np.where(np.isnan(template_noshift))
+                template_noshift[template_noshift_mask] = np.nanmedian(template_noshift)
+                template_noshift_continuum = ndi.median_filter(template_noshift, 100)
+                template_noshift = (template_noshift - template_noshift_continuum) + np.median(template_noshift_continuum)
+                template_noshift[template_noshift_mask] = np.nan
 
-            star_template = np.interp(thiswvs, star_wvs, norm_star)
-            star_mask = np.where(np.isnan(star_template))
-            star_template[star_mask] = np.nanmedian(star_template)
-            star_continuum = ndi.median_filter(star_template, 100)
-            star_template = (star_template - star_continuum) + np.median(star_continuum)
-            star_template[star_mask] = np.nan
+                star_template = np.interp(thiswvs, star_wvs[fib], norm_star[fib])
+                star_mask = np.where(np.isnan(star_template))
+                star_template[star_mask] = np.nanmedian(star_template)
+                star_continuum = ndi.median_filter(star_template, 100)
+                star_template = (star_template - star_continuum) + np.median(star_continuum)
+                star_template[star_mask] = np.nan
 
-            good = np.where((~np.isnan(order_copy)) & (~np.isnan(template)) & (~np.isnan(star_template)) & (~np.isnan(template_noshift)))
-            all_data = np.append(all_data, order_copy[good])
-            all_pl_template = np.append(all_pl_template, template[good])
-            all_star_template = np.append(all_star_template, star_template[good])
-            all_pl_noshift_template = np.append(all_pl_noshift_template, template_noshift[good])
-            order_ids = np.append(order_ids, np.ones(template[good].shape) * i)
+                good = np.where((~np.isnan(order_copy)) & (~np.isnan(template)) & (~np.isnan(star_template)) & (~np.isnan(template_noshift)))
+                all_data = np.append(all_data, order_copy[good])
+                all_pl_template = np.append(all_pl_template, template[good])
+                all_star_template = np.append(all_star_template, star_template[good])
+                all_pl_noshift_template = np.append(all_pl_noshift_template, template_noshift[good])
+                order_ids = np.append(order_ids, np.ones(template[good].shape) * i)
+                fib_ids = np.append(fib_ids, np.ones(template[good].shape) * fib)
 
-        A_matrix = np.zeros([np.size(all_pl_template), orders_wvs.shape[0] + 1])
+        A_matrix = np.zeros([np.size(all_pl_template), orders_wvs.shape[0] + orders_wvs.shape[1] + 1])
         A_matrix[:, 0] = all_pl_template
-        for i in range(orders_wvs.shape[0]): 
-            order_indices = np.where(order_ids == i)
-            A_matrix[order_indices[0], i+1] = all_star_template[order_indices]
+        for fib in range(orders_wvs.shape[0]):
+            for i in range(orders_wvs.shape[1]): 
+                order_indices = np.where((order_ids == i) & (fib_ids == fib))
+                index = fib * orders_wvs.shape[0] + i + 1
+                A_matrix[order_indices[0], index] = all_star_template[order_indices]
 
         results = optimize.lsq_linear(A_matrix, all_data)
 
