@@ -174,6 +174,7 @@ def nod_subtract(raw_frames, fiber_goals=None, pairsub=False, copy=True):
     for i in range(len(raw_frames)):
         if fiber_goals[i] != curr_group:
             group_index += 1
+            curr_group = fiber_goals[i]
         fiber_groups[i] = group_index
     
     processed_data = []
