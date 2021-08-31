@@ -52,7 +52,6 @@ if 'b1' not in trace_dat.labels:
 
 sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=True)
 
-
 spectral_dataset = extraction.extract_flux(sci_dataset, trace_dat, fit_background=True, bad_pixel_fraction=0.01, pool=mypool)
 
 spectral_dataset.save(filedir=out_flux_dir)
