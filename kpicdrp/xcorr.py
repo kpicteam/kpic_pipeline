@@ -218,7 +218,7 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         results_star = optimize.lsq_linear(A_matrix, all_star_template)
 
         fluxes.append(results.x[0])
-        star_fluxes.append(results.x[1])
+        star_fluxes.append(results.x[1:])
 
         star_pl_fluxes.append(results_star.x[0])
         acf_fluxes.append(results_noshift.x[0])
