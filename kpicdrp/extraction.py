@@ -1,4 +1,5 @@
 import os
+import copy as copylib
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.interpolate as interpolate
@@ -54,13 +55,15 @@ def add_baryrv_to_header(frames, copy=True):
 
     Args:
         frames (data.Dataset): dataset to modify
-        copy (bool): if True, modifies copies of input data
+        copy (bool): if True, makes copies of input data
     """
     processed_data = []
     for frame in frames:
         if copy:
-            out_header = frame.header.copy()
+            new_frame = copylib.deepcopy(frame)
+            out_header = new_frame.header
         else:
+            new_frame = frame
             out_header = frame.header
 
         keck = EarthLocation.from_geodetic(lat=19.8283 * u.deg, lon=-155.4783 * u.deg, height=4160 * u.m)
@@ -71,8 +74,6 @@ def add_baryrv_to_header(frames, copy=True):
 
         tnow = Time.now()
         out_header['HISTORY'] = "[{0}] Calculated barycentric RV".format(str(tnow))
-
-        new_frame = data.DetectorFrame(data=frame.data, header=out_header, filepath=frame.filepath)
 
         processed_data.append(new_frame)
     
