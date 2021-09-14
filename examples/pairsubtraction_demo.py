@@ -41,6 +41,6 @@ raw_sci_dataset = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
 # fetch calibration files
 badpixmap = det_caldb.get_calib(raw_sci_dataset[0], type="BadPixelMap")
 
-sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, None, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction=True, fiber_goals=goal_fibers, pairsub=True)
+sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, None, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction='pair', fiber_goals=goal_fibers)
 
 sci_dataset.save(filedir=out_folder)
