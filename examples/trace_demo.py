@@ -50,7 +50,7 @@ bkgd = det_caldb.get_calib(input_data[0], type="Background")
 badpixmap = det_caldb.get_calib(input_data[0], type="BadPixelMap")
 
 # Read the raw detector images into a cube while subtracting background
-cleaned_data = extraction.process_sci_raw2d(input_data, bkgd, badpixmap, detect_cosmics=True, scale=False, add_baryrv=False)
+cleaned_data = extraction.process_sci_raw2d(input_data, bkgd, badpixmap, detect_cosmics=True, add_baryrv=False)
 
 # Define the first guess for the trace location
 if make_guess:
