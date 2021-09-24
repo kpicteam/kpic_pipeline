@@ -433,15 +433,6 @@ class Spectrum(BasicData):
         else:
             self.errs = self.extdata[0]
 
-        if wavecal is not None:
-            self._wvs = wavecal.wvs
-            self.header['WAVCALIB'] = True
-            self.header['WAVEFILE'] = wavecal.filename
-        elif (self.extdata is not None) and (len(self.extdata) > 1):
-            self._wvs = self.extdata[1]
-        else:
-            self._wvs = None
-
         # grab labels for each fiber
         if labels is not None:
             if len(labels) != self.fluxes.shape[0]:
@@ -453,6 +444,16 @@ class Spectrum(BasicData):
             for i in range(num_fibs):
                 self.labels.append(self.header['FIB{0}'.format(i)])
 
+        if wavecal is not None:
+            # can wavelength calibrate once labels are set
+            self.calibrate_wvs(wavecal)
+        elif (self.extdata is not None) and (len(self.extdata) > 1):
+            # read in a wavelength calibrated file
+            self._wvs = self.extdata[1]
+        else:
+            self._wvs = None
+            self.header['WAVCALIB'] = False
+
     # create the data field dynamically 
     @property
     def wvs(self):
@@ -460,10 +461,13 @@ class Spectrum(BasicData):
             raise ValueError("This spectrum is not wavelength calibrated.")
         else:
             return self._wvs
-    @wvs.setter
-    def wvs(self, wv_soln):
+
+    def calibrate_wvs(self, wv_soln):
         """
-        wv_soln (data.Wavecal): wavecal. Needs to have wvsolns for the fibers in self.labels
+        Uses the provided wavelength solution to assign wavelengths to each spectral channel
+
+        Args:
+            wv_soln (data.Wavecal): wavecal. Needs to have wvsolns for the fibers in self.labels
         """
         # find the indexes of the labels we want from the wavelength solution
         indices = []
@@ -476,6 +480,8 @@ class Spectrum(BasicData):
                 # background and slit background fibers don't matter so just grab the first one
                 indices.append(0)
         self._wvs = wv_soln.wvs[indices]
+        self.header['WAVCALIB'] = True
+        self.header['WAVEFILE'] = wv_soln.filename
 
     def save(self, filename=None, filedir=None): 
         """
