@@ -460,6 +460,22 @@ class Spectrum(BasicData):
             raise ValueError("This spectrum is not wavelength calibrated.")
         else:
             return self._wvs
+    @wvs.setter
+    def wvs(self, wv_soln):
+        """
+        wv_soln (data.Wavecal): wavecal. Needs to have wvsolns for the fibers in self.labels
+        """
+        # find the indexes of the labels we want from the wavelength solution
+        indices = []
+        for label in self.labels:
+            if label[0] == 's':
+                # only valid for science fibers right now
+                index = wv_soln.labels.index(label)
+                indices.append(index)
+            else:
+                # background and slit background fibers don't matter so just grab the first one
+                indices.append(0)
+        self._wvs = wv_soln.wvs[indices]
 
     def save(self, filename=None, filedir=None): 
         """

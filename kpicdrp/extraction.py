@@ -16,7 +16,7 @@ import kpicdrp.data as data
 
 gain = 3.03 # e-/ADU
 
-def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction=False, fiber_goals=None, pairsub=False):
+def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction='none', fiber_goals=None):
     """
     Does simple pre-processing to the raw spectroscopic data: bkgd subtraction, bad pixels, cosmic rays
 
@@ -26,9 +26,10 @@ def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_bary
         badpixmap (data.BadPixelMap): 2-D bad pixel map
         detect_cosmics (bool): if True, runs a cosmic ray rejection algorithm on each image
         add_baryrv (bool): If True, add barycentric RV to the header
-        nod_subtraction (bool): if True, replaces 2-D bkgd frame subtraction with nod subtraction using adjacent raw_frames
+        nod_subtraction (str): if not 'none', replaces 2-D bkgd calib frame subtraction with nod subtraction with following options:
+                                * 'nod': uses adjacent raw_frames on different fibers
+                                * 'pair': groups frame sinto pairs and only uses the other frame in a pair
         fiber_goals (list): list of N_frames corresponding to the fiber goal for each frame. Automatically tries to figure out from headers otherwise
-        pairsub (bool): if True, groups frames into pairs and does subtraction, otherwise looks at both adjacent pairs
 
     Returns:
         processed_dataset (data.Dataset): a new dataset with basic 2D data processing performed 
@@ -38,9 +39,10 @@ def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_bary
     if add_baryrv:
         processed_dataset = add_baryrv_to_header(processed_dataset, copy=False)
 
-    if not nod_subtraction:
+    if nod_subtraction.lower() == 'none':
         processed_dataset = simple_bkgd_subtraction(processed_dataset, bkgd, copy=False)
     else:
+        pairsub = nod_subtraction.lower() == 'pair'
         processed_dataset = nod_subtract(processed_dataset, fiber_goals=fiber_goals, pairsub=pairsub, copy=False)
 
     return processed_dataset
