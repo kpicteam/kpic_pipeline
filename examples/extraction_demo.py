@@ -44,7 +44,7 @@ raw_sci_dataset = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
 bkgd = det_caldb.get_calib(raw_sci_dataset[0], type="Background")
 badpixmap = det_caldb.get_calib(raw_sci_dataset[0], type="BadPixelMap")
 
-trace_dat = data.TraceParams(filepath=trace_caldb.db['Filepath'][0])
+trace_dat = trace_caldb.get_calib(raw_sci_dataset[0])
 
 # get background traces if they aren't there already
 if 'b1' not in trace_dat.labels:
