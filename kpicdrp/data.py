@@ -27,7 +27,9 @@ class BasicData():
         filename (str): filepath that corresponds to the data (where it is read/written)
         type (str): kind of data in string representation
         time_obs (astropy.time.Time): time that data was taken
-        filesuffix (str): 
+        fiber_goal (str): short str label of the fiber goal. 'none' if not defined. 
+                          Uses same convention as the `labels` field in TraceParams and Spectrum
+        filesuffix (str): not implemented
     """
     type = "base"
 
@@ -63,6 +65,20 @@ class BasicData():
         date = self.header['DATE-OBS']
         utc = self.header['UTC']
         self.time_obs = time.Time("{0}T{1}Z".format(date, utc))
+
+        # record fiber goal
+        if "FIUGNM" in self.header:
+            goal_str = self.header["FIUGNM"]
+        else:
+            goal_str = "Unknown"
+        # convert to shorthand str that we use for labeling
+        if 'science fiber' in goal_str:
+            fibnum = goal_str[-1]
+            self.fiber_goal = 's{0}'.format(fibnum)
+        else:
+            # not one of the science fibers
+            self.fiber_goal = 'none'
+
 
     # create this field dynamically 
     @property
@@ -105,11 +121,24 @@ class BasicData():
 class Dataset():
     """
     A sequence of data objects of the same kind. Can be looped over. 
+    User needs to either initalize with the `frames` variable or pass in both `filelist` and `dtype`
+
+    Args:
+        frames (list/array of Data): a list or array of any Data class (i.e., BasicData or subclass)
+                                     If this is passed in, `filelist` and `dtype` are ignored.
+        filelist (list of str): list of filepaths to load in data from disk
+        dtype (kpicdrp.data class): BasicData or any subclass
+
+    Attributes:
+        frames (np.array of Data): list/array of Data objects
+        type (str): string representation of data type
+        data (np.array): datacube of all the data from all the frames
+        fib_indices (dict): dictionary that maps a fiber label (e.g., 's2') to an array
+                            of indices corresponding to frames with that fiber as the goal
     """
     def __init__(self, frames=None, filelist=None, dtype=None):
         if frames is None and filelist is None:
             raise ValueError("Either data_sequence or filelist needs to be specified")
-
 
         if frames is not None:
             # data is already nicely formatted. No need to do anything
@@ -133,11 +162,29 @@ class Dataset():
         if isinstance(self.frames, list):
             self.frames = np.array(self.frames)
 
+        # create this only when requested. 
+        # a dictionary of indices for the frames corresponding to each 
+        # science fiber
+        self._fib_indices = None
+
     # create the data field dynamically 
     @property
     def data(self):
         this_data = np.array([frame.data for frame in self.frames])
         return this_data
+
+    # create this field only when needed
+    @property
+    def fib_indices(self):
+        if self._fib_indices is None:
+            # populate this dictionary on the fly
+            self._fib_indices = {}
+            all_fib_goals = np.array(self.get_dataset_attributes("fiber_goal"))
+            uniq_goals = np.unique(all_fib_goals)
+            for goal_label in uniq_goals:
+                this_indices = np.where(all_fib_goals == goal_label)[0]
+                self._fib_indices[goal_label] = this_indices
+        return self._fib_indices
 
     def __iter__(self):
         return self.frames.__iter__()
@@ -308,6 +355,7 @@ class TraceParams(BasicData):
         locs (np.array): location of traces on detector (N_fibers, N_orders, N_x)
         widths(np.array): standard deviation of Gaussian profile of traces (N_fibers, N_orders, N_x)
         labels (list of str): labels for each fiber. See `labels` attribute below for details of how labels are defined
+        trace_index (dict): maps label (e.g., 's1') to index in the N_traces (e.g., 0)
         header: FITS header for file
         filepath (str): filepath to read the calibration file from, if applicable
 
@@ -345,6 +393,12 @@ class TraceParams(BasicData):
             self.locs = locs
             self.widths = widths
             self.labels = labels
+
+        # trace indices mapping
+        self.trace_index = {}
+        for i, label in enumerate(self.labels):
+            self.trace_index[label] = i
+
 
     def get_sci_indices(self):
         """
@@ -413,6 +467,7 @@ class Spectrum(BasicData):
         fluxes (np.array): extracted fluxes. Dimensions are (N_traces x N_orders x N_columns)
         errs (np.array): uncertainties on fluxes. (N_traces x N_orders x N_columns)
         labels (list of str): labels (e.g, 's1', 'b3') for each trace. Same convention as TraceParams
+        trace_index (dict): maps label (e.g., 's1') to index in the N_traces (e.g., 0)
         wavecal (Wavecal): wavelength calibration if desired (optional)
         header: FITS header (only needed if creating a new object from scratch)
         filepath (str): path to file
@@ -443,6 +498,10 @@ class Spectrum(BasicData):
             self.labels = []
             for i in range(num_fibs):
                 self.labels.append(self.header['FIB{0}'.format(i)])
+        # fiber indices
+        self.trace_index = {}
+        for i, label in enumerate(self.labels):
+            self.trace_index[label] = i
 
         if wavecal is not None:
             # can wavelength calibrate once labels are set

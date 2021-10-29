@@ -168,7 +168,7 @@ def nod_subtract(raw_frames, fiber_goals=None, pairsub=False, copy=True):
         copy (bool): if True, modifies copies of input data
     """ 
     if fiber_goals is None:
-        fiber_goals = raw_frames.get_header_values("GOALNM")
+        fiber_goals = raw_frames.get_header_values("FIUGNM")
     
     # group frames by fiber goal
     group_index = 0
