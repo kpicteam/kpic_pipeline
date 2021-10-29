@@ -207,12 +207,12 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
                 order_ids = np.append(order_ids, np.ones(template[good].shape) * i)
                 fib_ids = np.append(fib_ids, np.ones(template[good].shape) * fib)
 
-        A_matrix = np.zeros([np.size(all_pl_template), orders_wvs.shape[0] + orders_wvs.shape[1] + 1])
+        A_matrix = np.zeros([np.size(all_pl_template), orders_wvs.shape[0] * orders_wvs.shape[1] + 1])
         A_matrix[:, 0] = all_pl_template
         for fib in range(orders_wvs.shape[0]):
             for i in range(orders_wvs.shape[1]): 
                 order_indices = np.where((order_ids == i) & (fib_ids == fib))
-                index = fib * orders_wvs.shape[0] + i + 1
+                index = fib * orders_wvs.shape[1] + i + 1
                 A_matrix[order_indices[0], index] = all_star_template[order_indices]
 
         results = optimize.lsq_linear(A_matrix, all_data)
@@ -226,7 +226,7 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
 
         star_pl_fluxes.append(results_star.x[0])
         acf_fluxes.append(results_noshift.x[0])
-        
+       
     return np.array(fluxes), np.array(acf_fluxes), np.array(star_pl_fluxes), np.array(star_fluxes)
 
 
