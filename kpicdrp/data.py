@@ -613,6 +613,11 @@ class Wavecal(BasicData):
                     print("Warning: Keyword FIB{0} not found in header. Guessing this is s{1}".format(i,i+1))
                     self.labels.append("s{0}".format(i+1))
 
+        # fiber indices
+        self.trace_index = {}
+        for i, label in enumerate(self.labels):
+            self.trace_index[label] = i
+
         # check what type of wavecal this is
         if method is not None:
             self.method = method
