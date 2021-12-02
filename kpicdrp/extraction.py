@@ -34,7 +34,9 @@ def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_bary
     Returns:
         processed_dataset (data.Dataset): a new dataset with basic 2D data processing performed 
     """
-    processed_dataset = correct_bad_pixels(raw_frames, badpixmap, detect_cosmics=detect_cosmics)
+    processed_dataset = compute_photon_noise_in_frames(raw_frames)
+
+    processed_dataset = correct_bad_pixels(processed_dataset, badpixmap, detect_cosmics=detect_cosmics, copy=False)
 
     if add_baryrv:
         processed_dataset = add_baryrv_to_header(processed_dataset, copy=False)
@@ -47,6 +49,32 @@ def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_bary
 
     return processed_dataset
 
+
+def compute_photon_noise_in_frames(raw_frames, copy=True):
+    """
+    Computes the noise in each frame assuming all counts are due to photon noise
+    Adds them to the noise attirbute
+
+    Args:
+        raw_frames (data.Dataset): dataset to modify
+        copy (bool): if True, makes copies of input data
+    """
+    processed_data = []
+    for frame in raw_frames:
+        if copy:
+            new_frame = copylib.deepcopy(frame)
+        else:
+            new_frame = frame
+
+        var_e = gain * new_frame.data
+        noise_e = np.sqrt(var_e)
+        noise_adu = noise_e/gain
+        new_frame.noise = np.sqrt(new_frame.noise**2 + noise_adu**2)
+    
+        processed_data.append(new_frame)
+
+    processed_dataset = data.Dataset(processed_data)
+    return processed_dataset
 
 def add_baryrv_to_header(frames, copy=True):
     """
@@ -144,12 +172,14 @@ def simple_bkgd_subtraction(raw_frames, bkgd, scale=False, copy=True):
             scale_factor = 1
 
         new_data = frame.data - (bkgd.data * scale_factor)
-        
+        new_noise = np.sqrt(frame.noise**2 + bkgd.noise**2)
+
         tnow = Time.now()
         new_hdr['HISTORY'] = "[{0}] Subtracted thermal background frame {1}".format(str(tnow), bkgd.filename)
 
-        new_frame = data.DetectorFrame(data=new_data, header=new_hdr, filepath=frame.filepath)
+        new_frame = data.DetectorFrame(data=new_data, header=new_hdr, filepath=frame.filepath, noise=new_noise)
         new_frame.filename = new_frame.filename[:-5] + "_bkgdsub.fits"
+
 
         processed_data.append(new_frame)
     
@@ -196,9 +226,11 @@ def nod_subtract(raw_frames, fiber_goals=None, pairsub=False, copy=True):
             good_frames = np.where(fiber_groups == pair_index)
         
         bkgd = np.nanmean(raw_frames[good_frames].get_dataset_attributes('data'), axis=0)
+        bkgd_noise = np.nanmean(raw_frames[good_frames].get_dataset_attributes('noise'), axis=0)/np.sqrt(np.size(good_frames))
         files_used = raw_frames[good_frames].get_dataset_attributes('filename')
 
         new_frame = raw_frames[i].data - bkgd
+        new_noise = np.sqrt(raw_frames[i].noise**2 + bkgd_noise**2)
 
         if copy:
             output_hdr = raw_frames[i].header.copy()
@@ -206,7 +238,7 @@ def nod_subtract(raw_frames, fiber_goals=None, pairsub=False, copy=True):
             output_hdr = raw_frames[i].header
 
         tnow = Time.now()
-        new_frame = data.DetectorFrame(data=new_frame, header=output_hdr, filepath=raw_frames[i].filepath)
+        new_frame = data.DetectorFrame(data=new_frame, header=output_hdr, filepath=raw_frames[i].filepath, noise=new_noise)
         new_frame.filename = new_frame.filename[:-5] + "_nodsub.fits"
         new_frame.header['HISTORY'] = "[{0}] Performed nod background subtraction with the following frames: {1}".format(str(tnow), " ".join(files_used))
         
@@ -241,8 +273,8 @@ def extract_1d(dat_coords, dat_slice, center, sigma, noise):
     noise = noise[good]
     initial_flux = np.sum(good_slice * g(good_coords))/np.sum(g(good_coords)*g(good_coords))
     
-    good_var = (initial_flux * g(good_coords))/gain + noise**2
-    bkgd_var = noise**2
+    good_var = noise**2
+    bkgd_var = noise**2 # TODO: not currently implemented. 
     flux = np.sum(good_slice * g(good_coords) / good_var)/np.sum(g(good_coords)*g(good_coords)/good_var)
     flux_err = np.sqrt(1./np.sum(g(good_coords)*g(good_coords)/good_var))
     flux_err_bkgd_only = np.sqrt(1./np.sum(g(good_coords)*g(good_coords)/bkgd_var))
@@ -371,8 +403,8 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
                 # JX: Why 6?
                 dat_slice = img_column[center_int-6:center_int+6+1] - bkgd_level
                 ys = np.arange(center_int-6, center_int+6+1)
-                noise = img_noise[center_int-6:center_int+6+1, x]
-                noise[np.where(np.isnan(noise))] = bkgd_noise
+                noise = np.sqrt(img_noise[center_int-6:center_int+6+1, x]**2 + err_bkgd**2)
+                noise[np.where(np.isnan(noise))] = np.sqrt(bkgd_noise**2 + err_bkgd**2)
 
                 #flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
                 if box: 
@@ -446,9 +478,10 @@ def extract_flux(dataset, trace_params, fit_background=False, bad_pixel_fraction
 
     for frame in dataset:
         image = frame.data
-        # if no noise map passed in, try to compute it emperically from the data
-        # if img_noise is None:
-        img_noise = np.zeros(image.shape) * np.nan
+        img_noise = frame.noise
+        # if the frame as no noise, mark is as nan
+        if np.all(img_noise == 0):
+            img_noise = np.zeros(image.shape) * np.nan
 
         fluxes = np.zeros(trace_locs.shape)+np.nan
         fluxerrs_extraction = np.zeros(trace_locs.shape)+np.nan

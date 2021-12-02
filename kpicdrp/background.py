@@ -107,7 +107,7 @@ def create_background_badpixelmap(background_frames, fileprefix=None, plot=False
     # suppress warnings
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        bkgd_noise = np.nanstd(background_cube, axis=0)
+        bkgd_noise = np.nanstd(background_cube, axis=0)/np.sqrt(background_cube.shape[0])
         master_bkgd = np.nanmean(background_cube, axis=0)
 
     badpixmap = np.ones(master_bkgd.shape)
@@ -138,7 +138,7 @@ def create_background_badpixelmap(background_frames, fileprefix=None, plot=False
     bkgd_filepath = os.path.join(background_frames[0].filedir, bkgd_filename)
     bpmap_filepath = os.path.join(background_frames[0].filedir, bpmap_filename)
 
-    master_bkgd = data.Background(data=master_bkgd, header=bkgd_header, filepath=bkgd_filepath, data_noise=smoothed_thermal_noise)
+    master_bkgd = data.Background(data=master_bkgd, header=bkgd_header, filepath=bkgd_filepath, noise=smoothed_thermal_noise)
     badpixmap = data.BadPixelMap(data=badpixmap, header=bkgd_header, filepath=bpmap_filepath)
 
     # add history of data reduction

@@ -250,7 +250,7 @@ class DetectorFrame(BasicData):
     """
     type = "2d"
 
-    def __init__(self, data=None, header=None, filepath=""):
+    def __init__(self, data=None, header=None, filepath="", noise=None, ):
         super().__init__(data, header, filepath)
         
         if 'ROTATED' not in self.header:
@@ -258,24 +258,15 @@ class DetectorFrame(BasicData):
             self.data = np.rot90(self.data, -1)
             self.header['ROTATED'] = True # mark in the header frame has been rotated
 
-
-class Background(DetectorFrame):
-    """
-    A thermal background frame from the NIRSPEC detector. Has shape 2048x2048
-    """
-    type = "bkgd"
-
-    def __init__(self, data=None, header=None, filepath="", data_noise=None):
-        super().__init__(data, header, filepath)
-
-        if data_noise is not None:
-            self.noise = data_noise
+        if noise is not None:
+            self.noise = noise
         elif self.extdata is not None:
+            # check if it got read in as an extension header through the filepath. 
             self.noise = self.extdata[0]
         else: 
             self.noise = np.zeros(self.data.shape)
 
-    def save(self, filename=None, filedir=None, caldb=None):
+    def save(self, filename=None, filedir=None):
         """
         Save file to disk with user specified filepath
 
@@ -283,9 +274,6 @@ class Background(DetectorFrame):
             filename (str): filepath to save to. Use self.filename if not specified
             caldb (DetectorCalDB object): if specified, calibration database to keep track of files
         """
-        self.header['ISCALIB'] = True
-        self.header['CALIBTYP'] = "Background"
-
         if filename is not None:
             self.filename = filename
         if filedir is not None:
@@ -300,6 +288,28 @@ class Background(DetectorFrame):
         hdulist.append(exthdu1)
         hdulist.writeto(filepath, overwrite=True)
         hdulist.close()
+
+class Background(DetectorFrame):
+    """
+    A thermal background frame from the NIRSPEC detector. Has shape 2048x2048
+    """
+    type = "bkgd"
+
+    def __init__(self, data=None, header=None, filepath="", noise=None):
+        super().__init__(data, header, filepath, noise)
+
+    def save(self, filename=None, filedir=None, caldb=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filename (str): filepath to save to. Use self.filename if not specified
+            caldb (DetectorCalDB object): if specified, calibration database to keep track of files
+        """
+        self.header['ISCALIB'] = True
+        self.header['CALIBTYP'] = "Background"
+
+        super().save(filename=filename, filedir=filedir)
 
         if caldb is not None:
             caldb.create_entry(self)
