@@ -663,7 +663,7 @@ def sellmeir1(wvs, temp, K1, K2, K3, L1, L2, L3):
 
     return n
 
-def psg_wavcal_model(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model_wvs,stellar_model_grid,
+def psg_wavcal_fm(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model_wvs,stellar_model_grid,
                      telluric_wvs,psg_tuple,N_nodes_wvs,blaze_chunks,
                      simplewvsfit=True,wvs_init = None,baryrv=0,fix_parameters=None,quickinstbroadening=True, fixed_spec_func= None,
                      extra_outputs=False):
@@ -714,16 +714,15 @@ def psg_wavcal_model(nonlin_paras, spectrum,spec_err, line_width_func,stellar_mo
             if simplewvsfit:
                 new_wvs = wvs_init[orderid, :]  + wvs_coefs[0] + (wvs_init[orderid, :]-np.mean(wvs_init[orderid, :])) * (wvs_coefs[1])
             else:
-                x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(
-                    np.int)]  # np.array([wvs_stamp[wvid] for wvid in )
+                x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(np.int)]  # np.array([wvs_stamp[wvid] for wvid in )
                 spl = InterpolatedUnivariateSpline(x_knots, wvs_coefs, k=np.min([3, N_nodes_wvs - 1]), ext=0)
                 new_wvs = spl(x)
             out_newwvs[orderid, :] = new_wvs
 
         if fixed_spec_func is None:
             reduc_factor = 40
-            telluric_wvs = telluric_wvs[0:(np.size(telluric_wvs) // reduc_factor) * reduc_factor]
-            telluric_wvs = np.mean(np.reshape(telluric_wvs, ((np.size(telluric_wvs) // reduc_factor), reduc_factor)), axis=1)
+            _telluric_wvs = telluric_wvs[0:(np.size(telluric_wvs) // reduc_factor) * reduc_factor]
+            _telluric_wvs = np.mean(np.reshape(_telluric_wvs, ((np.size(_telluric_wvs) // reduc_factor), reduc_factor)), axis=1)
             telluric_spec = scale_psg(psg_tuple, airmass, pwv)
             telluric_spec = telluric_spec[0:(np.size(telluric_spec) // reduc_factor) * reduc_factor]
             telluric_spec = np.mean(np.reshape(telluric_spec, ((np.size(telluric_spec) // reduc_factor), reduc_factor)), axis=1)
@@ -749,8 +748,8 @@ def psg_wavcal_model(nonlin_paras, spectrum,spec_err, line_width_func,stellar_mo
                     minwv2 = np.min(out_newwvs[orderid+1,:])
                 min_bound = np.nanmax([(minwv-(maxwv-minwv)/1),(maxwv1+minwv)/2])
                 max_bound = np.nanmin([(maxwv+(maxwv-minwv)/1),(maxwv+minwv2)/2])
-                where_order_wvs = np.where((min_bound<telluric_wvs)*(telluric_wvs<max_bound))
-                telluric_order_wvs = telluric_wvs[where_order_wvs]
+                where_order_wvs = np.where((min_bound<_telluric_wvs)*(_telluric_wvs<max_bound))
+                telluric_order_wvs = _telluric_wvs[where_order_wvs]
                 telluric_order_spec = telluric_spec[where_order_wvs]
                 stellar_order_spec = stellar_model_spec_avg_func(telluric_order_wvs* (1 - (star_rv-baryrv) / c_kms))
                 if vsini != 0:
@@ -808,6 +807,11 @@ def psg_wavcal_model(nonlin_paras, spectrum,spec_err, line_width_func,stellar_mo
             new_wvs = out_newwvs[orderid,:]
             tmp = conv_order_spec_func(new_wvs)
             tmp = (tmp / np.nanmean(tmp))
+            # if extra_outputs:
+            #     # plt.subplot(2,1,1)
+            #     plt.plot(tmp,label="1")
+            #     # plt.subplot(2,1,2)
+            #     # plt.plot(np.concatenate(telluric_wvs_list,axis=0), np.concatenate(conv_order_spec_list,axis=0))
             tmp_M = tmp[:, None] * M0
             M_extended = np.zeros((N_orders*nz,M0.shape[1]))
             M_extended[orderid*nz:(orderid+1)*nz,:] = tmp_M
@@ -877,7 +881,7 @@ def process_chunk(args):
     return out_chunk
 
 
-def search_planet(para_vecs,fm_func,fm_paras,numthreads=None):
+def grid_search(para_vecs,fm_func,fm_paras,numthreads=None):
     """
     Planet detection, CCF, or grid search routine.
     It fits for the non linear parameters of a forward model over a user-specified grid of values while marginalizing
@@ -981,7 +985,7 @@ def optimize_wavcal(fm_func, fm_paras,paras0,nonlin_paras_mins,nonlin_paras_maxs
     M = M[:, validpara[0]]
     d = d / s
     M = M / s[:, None]
-    from scipy.optimize import lsq_linear
+    # from scipy.optimize import lsq_linear
     paras = lsq_linear(M, d).x
     m = np.dot(M, paras)
 
