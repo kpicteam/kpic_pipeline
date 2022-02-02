@@ -764,7 +764,9 @@ def psg_wavcal_fm(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model
                     n_mat = sellmeir1(telluric_order_wvs, fringing_Tmat, caf2_args[0], caf2_args[1], caf2_args[2], caf2_args[3], caf2_args[4], caf2_args[5])
                     # import matplotlib.pyplot as plt
                     # plt.plot(highres_order_spec,label="ori")
-                    highres_order_spec_fringing = highres_order_spec*np.abs(1+fringing_ghostampl*np.exp(2*np.pi*1j*n_mat*fringing_OPD/telluric_order_wvs))
+                    # highres_order_spec_fringing = highres_order_spec*np.abs(1+fringing_ghostampl*np.exp(2*np.pi*1j*n_mat*fringing_OPD/telluric_order_wvs))
+                    phi = 2*np.pi*n_mat*fringing_OPD/telluric_order_wvs
+                    highres_order_spec_fringing = highres_order_spec*(1+fringing_ghostampl**2+fringing_ghostampl*np.cos(phi))
                     highres_order_spec = highres_order_spec_fringing/np.nansum(highres_order_spec_fringing)*np.nansum(highres_order_spec)
                     # plt.plot(highres_order_spec_fringing,label="fringing")
                     # # plt.plot(highres_order_spec-highres_order_spec_fringing,label="difference")
@@ -773,6 +775,7 @@ def psg_wavcal_fm(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model
                     # # plt.plot(telluric_order_wvs,np.abs(1+fringing_ghostampl*np.exp(2*np.pi*1j*n_mat*fringing_OPD/telluric_order_wvs)))
                     # # plt.plot(n_mat*fringing_OPD/telluric_order_wvs)
                     # plt.plot(np.abs(1+fringing_ghostampl*np.exp(2*np.pi*1j*n_mat*fringing_OPD/telluric_order_wvs)))
+                    # plt.plot((1+fringing_ghostampl**2+fringing_ghostampl*np.cos(phi)))
                     # plt.show()
 
 
@@ -915,7 +918,7 @@ def grid_search(para_vecs,fm_func,fm_paras,numthreads=None):
                 Out[:,...,3+Nl:3+2*Nl]: Uncertainties of best fit linear parameters
 
     """
-    para_grids = [np.ravel(pgrid) for pgrid in np.meshgrid(*para_vecs)]
+    para_grids = [np.ravel(pgrid) for pgrid in np.meshgrid(*para_vecs,indexing="ij")]
 
     if numthreads is None:
         _out = process_chunk((para_grids,fm_func,fm_paras))
