@@ -11,10 +11,11 @@ from astropy.time import Time
 import astropy.units as u
 from astropy.coordinates import SkyCoord, EarthLocation
 import copy
+import kpicdrp
 import kpicdrp.data as data
 
 
-gain = 3.03 # e-/ADU
+gain = kpicdrp.kpic_params.getfloat('NIRSPEC', 'gain')
 
 def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction='none', fiber_goals=None):
     """
