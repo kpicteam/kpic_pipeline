@@ -5,12 +5,12 @@ import astropy.modeling.models as models
 import astropy.units as u
 import kpicdrp
 
-gain = kpicdrp.kpic_params.get('NIRSPEC', 'gain')
+gain = kpicdrp.kpic_params.getfloat('NIRSPEC', 'gain')
 
 k_filt = astropy.io.ascii.read(os.path.join(kpicdrp.datadir, "2massK.txt"), names=['wv', 'trans'])
 
 
-def calculate_throughput(spectrum, k_mag, bb_temp=5000):
+def calculate_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
     """
     Roughly estimatels throughput of data. Currently only works for K-band for one particular grating configuration!!!
 
@@ -18,10 +18,17 @@ def calculate_throughput(spectrum, k_mag, bb_temp=5000):
         spectrum (data.Spectrum): a wavelength-calibrated 1D spectrum (run spectrum.calibrate_wvs() first!)
         k_mag (float): 2MASS K-band magnitude of the source
         bb_temp (float): optional, blackbody temperature assumed for stellar model. Assume 5000 K otherwise
+        fib (str): optional, label for which fiber to evaluate the throughput for. 
+                   If not specified, picks the one with highest flux
 
     Returns
         throughout (float): the 95% highest throughput calculated. Nearly the peak throughput
     """
+    # figure out the fiber
+    if fib is None:
+        med_flux = np.nanmedian(spectrum.data, axis=(1,2))
+        fib = spectrum.labels[np.argmax(med_flux)]
+
     exptime = spectrum.header['TRUITIME'] # exptime in seconds
 
     bb = models.BlackBody(temperature=bb_temp*u.K)
@@ -45,7 +52,7 @@ def calculate_throughput(spectrum, k_mag, bb_temp=5000):
     throughputs = []
 
     # plt.figure()
-    for wvs, order in zip(spectrum.wvs, spectrum.data):
+    for wvs, order in zip(spectrum.wvs, spectrum.data[spectrum.trace_index[fib]]):
         xcoords = np.arange(order.shape[0])
         
         dlam = wvs - np.roll(wvs, 1)

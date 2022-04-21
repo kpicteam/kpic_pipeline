@@ -15,7 +15,7 @@ import kpicdrp
 import kpicdrp.data as data
 
 
-gain = kpicdrp.kpic_params.get('NIRSPEC', 'gain')
+gain = kpicdrp.kpic_params.getfloat('NIRSPEC', 'gain')
 
 def process_sci_raw2d(raw_frames, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction='none', fiber_goals=None):
     """
