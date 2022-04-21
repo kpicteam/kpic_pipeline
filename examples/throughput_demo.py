@@ -5,7 +5,7 @@ import kpicdrp.throughput as throughput
 
 
 ## Change local directory
-kpicpublicdir = "../../public_kpic_data/" # main data dir
+kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
 
 ## Path relative to the public kpic directory
 filelist_spectra = glob.glob(os.path.join(kpicpublicdir, "20200928_HIP_95771","fluxes", "*bkgdsub_spectra.fits"))
