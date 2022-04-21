@@ -14,6 +14,7 @@ if not os.path.exists(config_filepath):
       config = configparser.ConfigParser()
       config.read(os.path.join(kpicdrp_basedir, ".kpicdrp_template"))
       config["PATH"]["caldb"] = kpicdrp_basedir
+      config["PATH"]["datadir"] = os.path.join(kpicdrp_basedir, "data/")
       with open(config_filepath, 'w') as f:
             config.write(f)
 
