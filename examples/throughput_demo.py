@@ -23,7 +23,7 @@ spectrum.calibrate_wvs(wvsoln) # make sure it is wavelength calibrated
 kmag = 0.52 # vega mag
 teff = 3800 # Kelvin, rough estimate
 
-peak_throughput = throughput.calculate_throughput(spectrum, kmag, bb_temp=teff)
+peak_throughput = throughput.calculate_peak_throughput(spectrum, kmag, bb_temp=teff)
 
 print(peak_throughput)
 

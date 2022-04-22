@@ -10,7 +10,7 @@ gain = kpicdrp.kpic_params.getfloat('NIRSPEC', 'gain')
 k_filt = astropy.io.ascii.read(os.path.join(kpicdrp.datadir, "2massK.txt"), names=['wv', 'trans'])
 
 
-def calculate_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
+def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
     """
     Roughly estimatels throughput of data. Currently only works for K-band for one particular grating configuration!!!
 
