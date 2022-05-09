@@ -52,7 +52,7 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
     throughputs = []
 
     # plt.figure()
-    for wvs, order in zip(spectrum.wvs, spectrum.data[spectrum.trace_index[fib]]):
+    for wvs, order in zip(spectrum.wvs[spectrum.trace_index[fib]], spectrum.data[spectrum.trace_index[fib]]):
         xcoords = np.arange(order.shape[0])
         
         dlam = wvs - np.roll(wvs, 1)
