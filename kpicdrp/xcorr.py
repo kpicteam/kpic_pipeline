@@ -545,11 +545,11 @@ def convolve_and_sample(wv_channels, sigmas, model_wvs, model_fluxes, channel_wi
     filter_coords = np.linspace(-num_sigma, num_sigma, filter_size)
     filter_coords = np.tile(filter_coords, [wv_channels.shape[0], 1]) #  shape of (N_output, filter_size)
     filter_wv_coords = filter_coords * sigmas_wvs[:,None] + wv_channels[:,None] # model wavelengths we want
-    lsf = np.exp(-filter_coords**2/2)
+    lsf = np.exp(-filter_coords**2/2)/np.sqrt(2*np.pi)
 
     model_interp = interp.interp1d(model_wvs, model_fluxes, kind='cubic', bounds_error=False)
     filter_model = model_interp(filter_wv_coords)
 
-    output_model = np.nansum(filter_model * lsf, axis=1)/np.sum(lsf * lsf, axis=1)
+    output_model = np.nansum(filter_model * lsf, axis=1)/np.sum(lsf, axis=1)
     
     return output_model
