@@ -4,13 +4,15 @@ import astropy.io.ascii
 import astropy.modeling.models as models
 import astropy.units as u
 import kpicdrp
+import matplotlib.pyplot as plt
+from scipy.signal import medfilt
 
 gain = kpicdrp.kpic_params.getfloat('NIRSPEC', 'gain')
 
 k_filt = astropy.io.ascii.read(os.path.join(kpicdrp.datadir, "2massK.txt"), names=['wv', 'trans'])
 
 
-def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
+def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None, plot=False):
     """
     Roughly estimatels throughput of data. Currently only works for K-band for one particular grating configuration!!!
 
@@ -20,6 +22,7 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
         bb_temp (float): optional, blackbody temperature assumed for stellar model. Assume 5000 K otherwise
         fib (str): optional, label for which fiber to evaluate the throughput for. 
                    If not specified, picks the one with highest flux
+        plot (boolean): whether to plot wvs vs throughput
 
     Returns
         throughout (float): the 95% highest throughput calculated. Nearly the peak throughput
@@ -50,11 +53,10 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
 
 
     throughputs = []
-
-    # plt.figure()
+    
+    plt.figure()
     for wvs, order in zip(spectrum.wvs[spectrum.trace_index[fib]], spectrum.data[spectrum.trace_index[fib]]):
-        xcoords = np.arange(order.shape[0])
-        
+        # xcoords = np.arange(order.shape[0])        
         dlam = wvs - np.roll(wvs, 1)
         dlam[0] = wvs[1] - wvs[0]
         
@@ -63,8 +65,16 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None):
         
         data_photons = order * gain
         
-        throughputs.append(data_photons/model_photonrate_order)
+        throughput_order = data_photons/model_photonrate_order
+        throughputs.append(throughput_order)
 
+        if plot:
+            throughput_order_smoothed = medfilt(throughput_order, kernel_size=21)
+            plt.plot(wvs, (throughput_order_smoothed), 'b-')
+    
+    if plot:
+        plt.show()
+    
     throughputs = np.array(throughputs)
-
-    return np.nanpercentile(throughputs, 95)
+        
+    return np.nanpercentile(throughputs, 95), throughputs
