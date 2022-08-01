@@ -51,10 +51,8 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None, plot=Fals
     tele_size = 76 * (100)**2 # cm^2
     model_photonrate = star_model * norm / photon_energy * (tele_size)
 
-
     throughputs = []
     
-    plt.figure()
     for wvs, order in zip(spectrum.wvs[spectrum.trace_index[fib]], spectrum.data[spectrum.trace_index[fib]]):
         # xcoords = np.arange(order.shape[0])        
         dlam = wvs - np.roll(wvs, 1)
@@ -69,6 +67,7 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None, plot=Fals
         throughputs.append(throughput_order)
 
         if plot:
+            plt.figure()
             throughput_order_smoothed = medfilt(throughput_order, kernel_size=21)
             plt.plot(wvs, (throughput_order_smoothed), 'b-')
     
