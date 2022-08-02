@@ -67,7 +67,7 @@ def parse_header_night(raw_dir):
     for file in glob(raw_dir + '/*.fits'):
         this_hdr = fits.open(file)[0].header
 
-        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown':
+        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOULWEATHER':
             
             # only K band for now
             if this_hdr['FILTER'] == 'Kband-new':
