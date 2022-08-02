@@ -67,7 +67,7 @@ def parse_header_night(raw_dir):
     for file in glob(raw_dir + '/*.fits'):
         this_hdr = fits.open(file)[0].header
 
-        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOULWEATHER':
+        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOUL WEATHER':
             
             # only K band for now
             if this_hdr['FILTER'] == 'Kband-new':
@@ -251,7 +251,7 @@ def save_bad_frames(obsdate, df, df_path):
         bad_frames = [197,198,199]
 
     elif obsdate == '20220718':
-        bad = np.linspace(113, 146, 34, dtype=int)
+        bad = np.linspace(87, 146, 60, dtype=int)
         bad_frames = np.append(bad, np.array([177,]))
 
     ## Add if there are bad frames for a date

@@ -35,7 +35,6 @@ filestr = "nspec"+obsdate[2:]+"_0{0:03d}.fits"
 df_path = os.path.join(df_dir, obsdate+'.csv')
 if os.path.exists(df_path):
     night_df = pd.read_csv(df_path)
-    unique_targets =np.unique(night_df['TARGNAME'].values)
     print('Loaded existing nightly df.')
 else:
     # generate a big df for all files from this night.
@@ -51,13 +50,15 @@ if not 'BADFRAME' in night_df.columns:
 night_df = night_df[night_df['BADFRAME'] == 0]
 print(str(night_df.shape[0]) + ' number of files to extract for this night.')
 
-print('Targets observed were: ')
+# remake unique targets. Sometimes all frames for a target are bad...
+print('Targets observed (with good frames) were: ')
+unique_targets =np.unique(night_df['TARGNAME'].values)
 print(unique_targets)
 # print(night_df.head())
 
 # iterate over target
 for target_name in unique_targets:
-
+    
     print('Onto ' + target_name)
     # make folders for the target
     target_date_dir, out_flux_dir, target_raw = make_dirs_target(kpicdir, target_name, obsdate)
@@ -79,7 +80,7 @@ for target_name in unique_targets:
     off_axis_ind = np.where( (dist_sep >= 35) | (cgname == 'vortex'))[0]
 
     bkgd_ind = np.where(exptime < 15)[0]
-    nod_ind = np.where(exptime >= 15)[0]
+    nod_ind = np.where(exptime >= 15)[0]  # To do: this breaks if there is only 1 SF
 
     # return indices of intersections between on/off axis and exptime
     # Case 1: bkgd and on-axis
