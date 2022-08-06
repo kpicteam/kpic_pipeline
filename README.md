@@ -25,4 +25,8 @@ for the night. This can be done with the relevant demo files in the examples fol
 The code is in the examples folder, with the name run_extraction_night.py. You run it with: 
 
     > python run_extraction_night.py
+   
+To run in real time (during observing), you need to constantly read the new files. Nodding is recommended since you might not have backgrounds. Run:
+
+    > python run_extraction_night.py --nod_only=y --new_files=y --plot=y
      
