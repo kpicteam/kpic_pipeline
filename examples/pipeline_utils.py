@@ -70,34 +70,34 @@ def parse_header_night(raw_dir):
         if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOUL WEATHER':
             
             # only K band for now
-            if this_hdr['FILTER'] == 'Kband-new':
-                # clean up names to conform to hcig1 convention
-                targname_orig = this_hdr['TARGNAME']
-                targname_new = targname_orig.replace('-', '')
-                if 'Her' in targname_orig:  # for ups_Her
-                    targname_new = targname_new.replace(' ', '_')
-                else:
-                    targname_new = targname_new.replace(' ', '')
-                targname_new = targname_new.replace('HIP0', 'HIP')
-                
-                all_target.append(targname_new)
-                all_targetold.append(targname_orig)
+            # if this_hdr['FILTER'] == 'Kband-new':
+            # clean up names to conform to hcig1 convention
+            targname_orig = this_hdr['TARGNAME']
+            targname_new = targname_orig.replace('-', '')
+            if 'Her' in targname_orig:  # for ups_Her
+                targname_new = targname_new.replace(' ', '_')
+            else:
+                targname_new = targname_new.replace(' ', '')
+            targname_new = targname_new.replace('HIP0', 'HIP')
+            
+            all_target.append(targname_new)
+            all_targetold.append(targname_orig)
 
-                all_utdate.append(this_hdr['DATE-OBS'])
-                all_uttime.append(this_hdr['UT'])
+            all_utdate.append(this_hdr['DATE-OBS'])
+            all_uttime.append(this_hdr['UT'])
 
-                all_filename.append(file)
-                all_fnum.append(this_hdr['FRAMENUM'])
-                all_exptime.append(this_hdr['TRUITIME'])
-                all_elev.append(this_hdr['EL'])
-                all_airmass.append(this_hdr['AIRMASS'])
-                all_sf.append(this_hdr['FIUGNM'])
-                all_offset.append(this_hdr['FIUDSEP'])
-                all_dar.append(this_hdr['FIUDAR'])
-                all_mask.append(this_hdr['FIUCGNAM'])
-                all_filt.append(this_hdr['FILTER'])
-                all_echlpos.append(this_hdr['ECHLPOS'])
-                all_disppos.append(this_hdr['DISPPOS'])
+            all_filename.append(file)
+            all_fnum.append(this_hdr['FRAMENUM'])
+            all_exptime.append(this_hdr['TRUITIME'])
+            all_elev.append(this_hdr['EL'])
+            all_airmass.append(this_hdr['AIRMASS'])
+            all_sf.append(this_hdr['FIUGNM'])
+            all_offset.append(this_hdr['FIUDSEP'])
+            all_dar.append(this_hdr['FIUDAR'])
+            all_mask.append(this_hdr['FIUCGNAM'])
+            all_filt.append(this_hdr['FILTER'])
+            all_echlpos.append(this_hdr['ECHLPOS'])
+            all_disppos.append(this_hdr['DISPPOS'])
 
     dict_keys = ['FILENUM', 'TARGNAME', 'UTDATE', 'UTTIME', 'TRUITIME', 'EL', 'SFNUM', 'FIUDSEP', 'DAR', 'AIRMASS', 
     'FILEPATH', 'FILTER', 'CORONAGRAPH', 'ECHLPOS', 'DISPPOS', 'TARGNAME_ORIG']
@@ -113,9 +113,10 @@ def do_extract_1d(filelist, out_flux_dir, out_filenames, use_nod_sub=True, mypoo
     
     raw_sci_dataset = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
 
-    # fetch calibration files
-    bkgd = det_caldb.get_calib(raw_sci_dataset[0], type="Background")
-    badpixmap = det_caldb.get_calib(raw_sci_dataset[0], type="BadPixelMap")
+    # no need to load these for nod sub
+    if not use_nod_sub:
+        bkgd = det_caldb.get_calib(raw_sci_dataset[0], type="Background")
+        badpixmap = det_caldb.get_calib(raw_sci_dataset[0], type="BadPixelMap")
 
     trace_dat = trace_caldb.get_calib(raw_sci_dataset[0])
 
@@ -146,7 +147,7 @@ def do_nod_subtract(filelist, sub_mode, fiber_goals, out_nod_dir):
 
     raw_sci_dataset = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
 
-    # fetch calibration files
+    # nod mode needs only bad pixel map
     badpixmap = det_caldb.get_calib(raw_sci_dataset[0], type="BadPixelMap")
 
     # two choices for subtraction_mode
@@ -180,14 +181,13 @@ def plot_spec(trace_dat, out_filenames, out_flux_dir, filenums, target_date_dir,
             plt.legend()
             plt.savefig(target_date_dir + '/SF' + str(fib_id+1) + '_extracted_spec.png', dpi=50)
 
-    plt.close('all')
-
     if show_plot:
         plt.show()
         plt.close('all')
+    else:
+        plt.close('all')
 
-
-def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, mypool=None, show_plot=False):
+def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_frames, mypool=None, show_plot=False):
 
     these_frames = target_files[inds]
     
@@ -201,15 +201,27 @@ def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, mypool=Non
     else:
         sub_mode = 'pair'
 
+    # do nod sub on all available frames
     fiber_goals = [ int(s[-1]) for s in sfnum[inds] ]  # pull out sf numbers
     print(fiber_goals, these_frames)
+    print('Running nod subtraction on all frames')
     nodsub_frames = do_nod_subtract(these_frames, sub_mode, fiber_goals, nodsub_dir)
-    out_filenames = [f.split('raw_pairsub/')[1].replace('_nodsub.fits', '_nodsub_spectra.fits') for f in nodsub_frames]
+
+    all_frames = [ os.path.join(out_flux_dir, f.split('raw_pairsub/')[1].replace('_nodsub.fits', '_nodsub_spectra.fits') ) for f in nodsub_frames]
+    
+    # extract new frames only
+    new_inds = np.where(np.isin(all_frames, existing_frames) == False)[0]  # pick out indices of new frames
+    new_frames = np.asarray(nodsub_frames)[new_inds]
+    out_filenames = [f.split('raw_pairsub/')[1].replace('_nodsub.fits', '_nodsub_spectra.fits') for f in new_frames]
+    filenums = [f[-9:].split('.fits')[0] for f in these_frames[new_inds]]
+
+    # print(new_inds)
+    # print(len(new_frames), len(out_filenames), len(filenums))
+    # print(new_frames, out_filenames, filenums)
 
     # extract!
-    spectral_dataset, trace_dat = do_extract_1d(nodsub_frames, out_flux_dir, out_filenames, use_nod_sub=True, mypool=mypool)
+    spectral_dataset, trace_dat = do_extract_1d(new_frames, out_flux_dir, out_filenames, use_nod_sub=True, mypool=mypool)
     
-    filenums = [f[-9:].split('.fits')[0] for f in these_frames]
     plot_spec(trace_dat, out_filenames, out_flux_dir, filenums, target_date_dir, show_plot=show_plot)
 
     return out_filenames
@@ -245,7 +257,9 @@ def save_bad_frames(obsdate, df, df_path):
     if obsdate == '20220723':
         bad = [197,177,178,179,180,181]
         saturated = np.linspace(153, 164, 12, dtype=int)
+        l_band = np.linspace(441, 468, 28, dtype=int)
         bad_frames = np.append(np.asarray(bad), saturated)
+        bad_frames = np.append(bad_frames, l_band)
 
     elif obsdate == '20220722':
         bad_frames = [197,198,199]
@@ -308,3 +322,39 @@ def add_thru_column(df, these_frames, all_thru95):
         df.loc[df['SPECFILE'] == raw_f, 'THRU95'] = thru95
 
     return df
+
+def read_user_options(opts):
+    
+    if len(opts) == 0:
+        return False, False, False
+
+    #print(opts)
+    nod_only_boo, new_files_boo, show_plot = False,False,False
+
+    try:
+        nod_only = opts[0][1]
+    except:
+        nod_only = 'n'
+    
+    if nod_only == 'y':
+        nod_only_boo = True
+        print('Nod subtraction only (requires more than 1 SF with data, and they have the same tint).')
+    
+    try:
+        new_files = opts[1][1]
+    except:
+        new_files = 'n'
+    if new_files == 'y':
+        new_files_boo = True
+        print('Rescanning directory to include new files.')
+
+    try:
+        plot = opts[2][1]
+    except:
+        plot = 'n'
+    if plot == 'y':
+        show_plot = True
+        print('Plotting spectra.')
+
+    # print(nod_only, new_files, plot)
+    return nod_only_boo, new_files_boo, show_plot
