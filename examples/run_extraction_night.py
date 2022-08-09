@@ -38,6 +38,8 @@ raw_datadir = os.path.join("/scr3/kpic/Data/", obsdate[2:], "spec")
 mypool = mp.Pool(16)
 #----------------------------------------------------------------
 
+# targets_to_run = ['HIP95771', 'HD984', 'HIP115119']
+
 # nspec file convention
 filestr = "nspec"+obsdate[2:]+"_0{0:03d}.fits"
 
@@ -87,15 +89,28 @@ for target_name in unique_targets:
     # using 35 mas, to handle cases where we intentionally offset RV star by 30 mas (prevent saturation...)
     # has to be pupil_mask. And condition
     on_axis_ind = np.where( (dist_sep < 35) & (cgname == 'pupil_mask'))[0]
+    # sometimes, we use custom for dichroic out 
+    if len(on_axis_ind) == 0:
+        on_axis_ind = np.where( (dist_sep < 35) & (cgname == 'Custom'))[0]
+    # or if still 0, could be MDA = apodizer
+    if len(on_axis_ind) == 0:
+        on_axis_ind = np.where( (dist_sep < 35) & (cgname == 'apodizer'))[0]
+
     # VFN mode + off-axis, for a companion. Or condition
     off_axis_ind = np.where( (dist_sep >= 35) | (cgname == 'vortex'))[0]
 
-    if nod_only:
-        nod_ind = np.where(exptime > -1)[0]  # All of the exposures
-        bkgd_ind = np.array([])  # empty for bkgd ind
+    # first check if we used more than 1 SF. If not, must do background subtraction
+    print(np.unique(sfnum))
+    if len(np.unique(sfnum)) == 1:
+        bkgd_ind = np.where(exptime > -1)[0]  # everything
+        nod_ind = np.array([])
     else:
-        bkgd_ind = np.where(exptime < 15)[0]
-        nod_ind = np.where(exptime >= 15)[0]  # To do: this breaks if there is only 1 SF
+        if nod_only:
+            nod_ind = np.where(exptime > -1)[0]  # everything
+            bkgd_ind = np.array([])  # empty for bkgd ind
+        else:
+            bkgd_ind = np.where(exptime < 15)[0]
+            nod_ind = np.where(exptime >= 15)[0]  # To do: this breaks if there is only 1 SF
 
     # return indices of intersections between on/off axis and exptime
     # Case 1: bkgd and on-axis

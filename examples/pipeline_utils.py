@@ -67,7 +67,8 @@ def parse_header_night(raw_dir):
     for file in glob(raw_dir + '/*.fits'):
         this_hdr = fits.open(file)[0].header
 
-        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOUL WEATHER':
+        # all kinds of names non-science frames might have
+        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOUL WEATHER' and this_hdr['TARGNAME'] != '':
             
             # only K band for now
             # if this_hdr['FILTER'] == 'Kband-new':
@@ -200,6 +201,9 @@ def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_f
         sub_mode = 'nod'  # good default, pair requires e.g. 23232323 sequences
     else:
         sub_mode = 'pair'
+
+    if 'HD984B' in target_date_dir:
+        sub_mode == 'pair'
 
     # do nod sub on all available frames
     fiber_goals = [ int(s[-1]) for s in sfnum[inds] ]  # pull out sf numbers
