@@ -5,7 +5,7 @@ from glob import glob
 import pandas as pd
 import getopt
 import sys
-from pipeline_utils import parse_header_night, do_extract_1d, run_nod, plot_spec, make_dirs_target, rsync_files, save_bad_frames, add_spec_column, read_user_options
+from pipeline_utils import parse_header_night, run_bkgd, run_nod, make_dirs_target, make_comp_dir, rsync_files, save_bad_frames, add_spec_column, read_user_options
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -120,35 +120,41 @@ for target_name in unique_targets:
     # Case 3: nod and off-axis
     nod_offaxis = np.intersect1d(nod_ind, off_axis_ind)
     # Case 4: bkgd and off-axis - this is rare after 2021
-    # also previous data won't have headers with all the info needed to run this pipeline
-    
-    print(nod_offaxis, nod_onaxis, bkgd_onaxis)
+    bkgd_offaxis = np.intersect1d(bkgd_ind, off_axis_ind)
+
+    print(nod_offaxis, nod_onaxis, bkgd_onaxis, bkgd_offaxis)
 
     if len(bkgd_onaxis) > 0:
         these_frames = target_files[bkgd_onaxis]
         # move the frames to raw dir
         rsync_files(these_frames, target_raw)
-        out_filenames = [f.split('spec/')[1].replace('.fits', '_bkgdsub_spectra.fits') for f in these_frames]
         existing_frames = glob(os.path.join(out_flux_dir, "*.fits"))
-
-        # print(len(existing_frames), len(these_frames))
         # if len(existing_frames) == 0:
         if len(existing_frames) < len(these_frames):
             print('Extracting on-axis flux for ' + target_name + ' from ' + obsdate + '; bkgd sub')
-            # extract new frames only
-            all_frames = [os.path.join(out_flux_dir, f) for f in out_filenames]
-            new_inds = np.where(np.isin(all_frames, existing_frames) == False)[0]  # pick out indices of new frames
-            new_frames = these_frames[new_inds]
-            print(new_frames)
-
-            filenums = [f[-9:].split('.fits')[0] for f in new_frames]
-            new_out_filenames = np.asarray(out_filenames)[new_inds]
-
-            spectral_dataset, trace_dat = do_extract_1d(new_frames, out_flux_dir, new_out_filenames, use_nod_sub=False, mypool=mypool)
-            plot_spec(trace_dat, new_out_filenames, out_flux_dir, filenums, target_date_dir, show_plot=show_plot)
-
+            out_filenames = run_bkgd(these_frames, target_date_dir, out_flux_dir, existing_frames, mypool=mypool, show_plot=show_plot)
         else:
             print(target_name + ' has already been extracted.')
+            _out_filenames = glob(os.path.join(out_flux_dir, "*.fits"))
+            out_filenames = [p.replace(out_flux_dir+'/', '') for p in _out_filenames]
+        orig_night_df = add_spec_column(orig_night_df, out_filenames, these_frames, out_flux_dir)
+
+    # off axis, bkgd sub
+    if len(bkgd_offaxis) > 0:
+        comp_date_dir, out_flux_dir, target_raw, comp_name = make_comp_dir(target_name, kpicdir, obsdate)
+        these_frames = target_files[bkgd_offaxis]
+        # move the frames to raw dir
+        rsync_files(these_frames, target_raw)
+        existing_frames = glob(os.path.join(out_flux_dir, "*.fits"))
+        # if len(existing_frames) == 0:
+        if len(existing_frames) < len(these_frames):
+            print('Extracting off-axis flux for ' + comp_name + ' from ' + obsdate + '; bkgd sub')
+            out_filenames = run_bkgd(these_frames, comp_date_dir, out_flux_dir, existing_frames, mypool=mypool, show_plot=show_plot)
+        else:
+            print(comp_name + ' has already been extracted.')
+            _out_filenames = glob(os.path.join(out_flux_dir, "*.fits"))
+            out_filenames = [p.replace(out_flux_dir+'/', '') for p in _out_filenames]
+            
         orig_night_df = add_spec_column(orig_night_df, out_filenames, these_frames, out_flux_dir)
 
     if len(nod_onaxis) > 0:
@@ -160,7 +166,6 @@ for target_name in unique_targets:
         if len(existing_frames) < len(these_frames):
             print('Extracting on-axis flux for ' + target_name + ' from ' + obsdate + '; nodding')
             out_filenames = run_nod(target_files, target_date_dir, nod_onaxis, sfnum, out_flux_dir, existing_frames, mypool=mypool, show_plot=show_plot)
-        
         else:
             print(target_name + ' has already been extracted.')
             _out_filenames = glob(os.path.join(out_flux_dir, "*.fits"))
@@ -170,15 +175,7 @@ for target_name in unique_targets:
 
     # for companion, append a letter to directory names.
     if len(nod_offaxis) > 0:
-        # Smarter about this?
-        if target_name == 'HR8799' or target_name == 'HD206893' or target_name == '51Eri' or target_name == 'PDS70':
-            which_planet = input('Enter planet name for '+target_name+' (b (or B), c, d, e?) >>> ')
-            which_planet = which_planet.strip()
-            comp_name = target_name + which_planet
-        else:
-            comp_name = target_name + 'B'
-        comp_date_dir, out_flux_dir, target_raw = make_dirs_target(kpicdir, comp_name, obsdate)
-
+        comp_date_dir, out_flux_dir, target_raw, comp_name = make_comp_dir(target_name, kpicdir, obsdate)
         these_frames = target_files[nod_offaxis]
         rsync_files(these_frames, target_raw)
 

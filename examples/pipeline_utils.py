@@ -230,6 +230,23 @@ def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_f
 
     return out_filenames
 
+def run_bkgd(these_frames, target_date_dir, out_flux_dir, existing_frames, mypool=None, show_plot=False):
+    out_filenames = [f.split('spec/')[1].replace('.fits', '_bkgdsub_spectra.fits') for f in these_frames]
+
+    # extract new frames only
+    all_frames = [os.path.join(out_flux_dir, f) for f in out_filenames]
+    new_inds = np.where(np.isin(all_frames, existing_frames) == False)[0]  # pick out indices of new frames
+    new_frames = these_frames[new_inds]
+    print(new_frames)
+
+    filenums = [f[-9:].split('.fits')[0] for f in new_frames]
+    new_out_filenames = np.asarray(out_filenames)[new_inds]
+
+    spectral_dataset, trace_dat = do_extract_1d(new_frames, out_flux_dir, new_out_filenames, use_nod_sub=False, mypool=mypool)
+    plot_spec(trace_dat, new_out_filenames, out_flux_dir, filenums, target_date_dir, show_plot=show_plot)
+
+    return out_filenames
+
 def make_dirs_target(kpicdir, target_name, obsdate):
     target_main_dir = os.path.join(kpicdir, "science", target_name)
     if not os.path.exists(target_main_dir):
@@ -362,3 +379,16 @@ def read_user_options(opts):
 
     # print(nod_only, new_files, plot)
     return nod_only_boo, new_files_boo, show_plot
+
+# Add when we discover more planets!
+# Can we be smarter about this? mostly complicated by systems with more than 1 planet
+def make_comp_dir(target_name, kpicdir, obsdate):
+    if target_name == 'HR8799' or target_name == 'HD206893' or target_name == '51Eri' or target_name == 'PDS70':
+        which_planet = input('Enter planet name for '+target_name+' (b (or B), c, d, e?) >>> ')
+        which_planet = which_planet.strip()
+        comp_name = target_name + which_planet
+    else:
+        comp_name = target_name + 'B'
+    comp_date_dir, out_flux_dir, target_raw = make_dirs_target(kpicdir, comp_name, obsdate)
+
+    return comp_date_dir, out_flux_dir, target_raw, comp_name
