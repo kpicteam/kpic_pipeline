@@ -87,20 +87,13 @@ for target_name in unique_targets:
 
     # companion or on-axis
     # using 35 mas, to handle cases where we intentionally offset RV star by 30 mas (prevent saturation...)
-    # has to be pupil_mask. And condition
-    on_axis_ind = np.where( (dist_sep < 35) & (cgname == 'pupil_mask'))[0]
-    # sometimes, we use custom for dichroic out 
-    if len(on_axis_ind) == 0:
-        on_axis_ind = np.where( (dist_sep < 35) & (cgname == 'Custom'))[0]
-    # or if still 0, could be MDA = apodizer
-    if len(on_axis_ind) == 0:
-        on_axis_ind = np.where( (dist_sep < 35) & (cgname == 'apodizer'))[0]
+    # usually pupil_mask / Custom for dichroic out / apodizer for MDA. And condition
+    on_axis_ind = np.where( (dist_sep < 35) & ((cgname == 'pupil_mask') | (cgname == 'Custom') | (cgname == 'apodizer')) )[0]
 
     # VFN mode + off-axis, for a companion. Or condition
     off_axis_ind = np.where( (dist_sep >= 35) | (cgname == 'vortex'))[0]
 
     # first check if we used more than 1 SF. If not, must do background subtraction
-    print(np.unique(sfnum))
     if len(np.unique(sfnum)) == 1:
         bkgd_ind = np.where(exptime > -1)[0]  # everything
         nod_ind = np.array([])
@@ -170,7 +163,7 @@ for target_name in unique_targets:
             print(target_name + ' has already been extracted.')
             _out_filenames = glob(os.path.join(out_flux_dir, "*.fits"))
             out_filenames = [p.replace(out_flux_dir+'/', '') for p in _out_filenames]
-
+        print(out_filenames)
         orig_night_df = add_spec_column(orig_night_df, out_filenames, these_frames, out_flux_dir)
 
     # for companion, append a letter to directory names.

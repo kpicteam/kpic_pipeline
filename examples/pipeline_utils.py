@@ -184,14 +184,12 @@ def plot_spec(trace_dat, out_filenames, out_flux_dir, filenums, target_date_dir,
 
     if show_plot:
         plt.show()
-        plt.close('all')
     else:
         plt.close('all')
 
 def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_frames, mypool=None, show_plot=False):
 
-    these_frames = target_files[inds]
-    
+    these_frames = target_files[inds]    
     nodsub_dir = os.path.join(target_date_dir, 'raw_pairsub/')
     if not os.path.exists(nodsub_dir):
         os.makedirs(nodsub_dir)
@@ -202,7 +200,7 @@ def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_f
     else:
         sub_mode = 'pair'
 
-    if 'HD984B' in target_date_dir:
+    if 'HD984' in target_date_dir:
         sub_mode == 'pair'
 
     # do nod sub on all available frames
@@ -228,7 +226,10 @@ def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_f
     
     plot_spec(trace_dat, out_filenames, out_flux_dir, filenums, target_date_dir, show_plot=show_plot)
 
-    return out_filenames
+    # output names for all files
+    all_out_filenames = [f.split('raw_pairsub/')[1].replace('_nodsub.fits', '_nodsub_spectra.fits') for f in nodsub_frames]
+
+    return all_out_filenames
 
 def run_bkgd(these_frames, target_date_dir, out_flux_dir, existing_frames, mypool=None, show_plot=False):
     out_filenames = [f.split('spec/')[1].replace('.fits', '_bkgdsub_spectra.fits') for f in these_frames]
