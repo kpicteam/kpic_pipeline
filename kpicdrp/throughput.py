@@ -11,7 +11,6 @@ gain = kpicdrp.kpic_params.getfloat('NIRSPEC', 'gain')
 
 k_filt = astropy.io.ascii.read(os.path.join(kpicdrp.datadir, "2massK.txt"), names=['wv', 'trans'])
 
-
 def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None, plot=False):
     """
     Roughly estimatels throughput of data. Currently only works for K-band for one particular grating configuration!!!
@@ -33,6 +32,7 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None, plot=Fals
         fib = spectrum.labels[np.argmax(med_flux)]
 
     exptime = spectrum.header['TRUITIME'] # exptime in seconds
+    coadds = spectrum.header['COADDS']
 
     bb = models.BlackBody(temperature=bb_temp*u.K)
     star_model = bb(spectrum.wvs * u.um).to(u.W/u.cm**2/u.um/u.sr, equivalencies=u.spectral_density(spectrum.wvs * u.um)).value
@@ -59,7 +59,7 @@ def calculate_peak_throughput(spectrum, k_mag, bb_temp=5000, fib=None, plot=Fals
         dlam[0] = wvs[1] - wvs[0]
         
         model_photonrate_order = np.interp(wvs, spectrum.wvs.ravel(), model_photonrate.ravel())
-        model_photonrate_order *= exptime * dlam
+        model_photonrate_order *= (exptime*coadds) * dlam
         
         data_photons = order * gain
         
