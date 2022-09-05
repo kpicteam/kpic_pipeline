@@ -71,7 +71,6 @@ def compute_photon_noise_in_frames(raw_frames, copy=True):
         noise_e = np.sqrt(var_e)
         noise_adu = noise_e/gain
         new_frame.noise = np.sqrt(new_frame.noise**2 + noise_adu**2)
-    
         processed_data.append(new_frame)
 
     processed_dataset = data.Dataset(processed_data)
@@ -140,7 +139,8 @@ def correct_bad_pixels(raw_frames, badpixmap, detect_cosmics=True, copy=True):
         tnow = Time.now()
         new_hdr['HISTORY'] = "[{0}] Masked {2} bad pixels using badpixelmap {1}".format(str(tnow), badpixmap.filename, np.size(np.where(np.isnan(badpixmap.data))))
 
-        new_frame = data.DetectorFrame(data=new_data, header=new_hdr, filepath=frame.filepath)
+        # add noise here, otherwise initializes noise back to 0.
+        new_frame = data.DetectorFrame(data=new_data, header=new_hdr, filepath=frame.filepath, noise=frame.noise)
 
         processed_data.append(new_frame)
     
@@ -174,6 +174,9 @@ def simple_bkgd_subtraction(raw_frames, bkgd, scale=False, copy=True):
 
         new_data = frame.data - (bkgd.data * scale_factor)
         new_noise = np.sqrt(frame.noise**2 + bkgd.noise**2)
+
+        # print('2nd new frame noise, frame.noise, bkgd.noise')
+        # print(np.nanmedian(new_noise), np.nanmedian(frame.noise), np.nanmedian(bkgd.noise))
 
         tnow = Time.now()
         new_hdr['HISTORY'] = "[{0}] Subtracted thermal background frame {1}".format(str(tnow), bkgd.filename)
@@ -225,6 +228,9 @@ def nod_subtract(raw_frames, fiber_goals=None, pairsub=False, copy=True):
             else:
                 pair_index = fiber_groups[i] - 1
             good_frames = np.where(fiber_groups == pair_index)
+
+        #     print(pair_index)
+        # print(good_frames)
         
         bkgd = np.nanmean(raw_frames[good_frames].get_dataset_attributes('data'), axis=0)
         bkgd_noise = np.nanmean(raw_frames[good_frames].get_dataset_attributes('noise'), axis=0)/np.sqrt(np.size(good_frames))
@@ -406,7 +412,7 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
                 ys = np.arange(center_int-6, center_int+6+1)
                 noise = np.sqrt(img_noise[center_int-6:center_int+6+1, x]**2 + err_bkgd**2)
                 noise[np.where(np.isnan(noise))] = np.sqrt(bkgd_noise**2 + err_bkgd**2)
-
+                
                 #flux, badpixmetric = extract_1d(ys, dat_slice, center, sigma, noise)
                 if box: 
                     flux, flux_err_extraction, flux_err_bkgd_only, maxres = extract_1d_box(ys, dat_slice, center, sigma, noise)
@@ -421,6 +427,16 @@ def _extract_flux_chunk(image, order_locs, order_widths, img_noise, fit_backgrou
             fluxerrs_extraction[fiber, x] = np.sqrt(flux_err_extraction**2 + err_bkgd**2) 
             fluxerrs_bkgd_only[fiber, x] = flux_err_bkgd_only
             fluxerrs_emperical[fiber, x] = fluxerr_emperical
+
+            # if x % 200 == 0 and fiber == 1:
+            #     try:
+            #         print('bkgd_noise, err_bkgd, bkgd_level, noise, img_noise')
+            #         print(bkgd_noise, err_bkgd, bkgd_level, noise, np.nanmedian(img_noise))
+
+            #         print('flux_err_extraction, err_bkgd, final_error')
+            #         print(flux_err_extraction, err_bkgd, fluxerrs_extraction[fiber, x])
+            #     except:
+            #         pass
 
         column_maxres = np.array(column_maxres)    
         
