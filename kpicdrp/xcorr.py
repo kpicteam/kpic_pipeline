@@ -367,22 +367,21 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas,
     thiswvs = orders_wvs
     star_template = np.interp(thiswvs, star_wvs, star_template_fluxes)
     star_template /= np.nanpercentile(star_template, 90)
-
+    
+    # shift by RV
     new_beta =(rvshift)/consts.c.to(u.km/u.s).value #+  (rel_v)/consts.c.to(u.km/u.s).value
     new_redshift = np.sqrt((1 + new_beta)/(1 - new_beta)) - 1
 
     template_wvs_starframe = template_wvs/(1+new_redshift)
-
-    # model_r = np.median(template_wvs/np.median(template_wvs - np.roll(template_wvs, 1)))
-    # data_r = 35000
-    # downsample = model_r/data_r/(2*np.sqrt(2*np.log(2)))
-    # broad_model = ndi.gaussian_filter(broad_model, downsample)
 
     template = np.interp(template_wvs_starframe, template_wvs, broad_model)
     template /= np.nanpercentile(template, 90)
 
     # broaden to instrumental resolution
     template = convolve_and_sample(thiswvs, order_sigmas, template_wvs, template)
+
+    # Another step to normalize, since the convolve step does not conserve continuum
+    template /= np.nanpercentile(template, 90)
 
     # scale the on-axis stellar fluxes
     star_template *= star_flux
@@ -546,11 +545,11 @@ def convolve_and_sample(wv_channels, sigmas, model_wvs, model_fluxes, channel_wi
     filter_coords = np.linspace(-num_sigma, num_sigma, filter_size)
     filter_coords = np.tile(filter_coords, [wv_channels.shape[0], 1]) #  shape of (N_output, filter_size)
     filter_wv_coords = filter_coords * sigmas_wvs[:,None] + wv_channels[:,None] # model wavelengths we want
-    lsf = np.exp(-filter_coords**2/2)
+    lsf = np.exp(-filter_coords**2/2)/np.sqrt(2*np.pi)
 
     model_interp = interp.interp1d(model_wvs, model_fluxes, kind='cubic', bounds_error=False)
     filter_model = model_interp(filter_wv_coords)
 
-    output_model = np.nansum(filter_model * lsf, axis=1)/np.sum(lsf * lsf, axis=1)
+    output_model = np.nansum(filter_model * lsf, axis=1)/np.sum(lsf, axis=1)
     
     return output_model

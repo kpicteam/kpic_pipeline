@@ -423,8 +423,12 @@ def _fit_psg_wavecal(paras):
     paras0 = np.array(paras0)
     initial_simplex = np.concatenate([paras0[None,:],paras0[None,:] + np.diag(simplex_init_steps)],axis=0)
 
+    # res = minimize(lambda paras: psg_wavcal_nloglike(paras, x,spectrum,spec_err,star_func,telluric_wvs,psg_tuple,N_nodes_wvs,blaze_chunks,fitsrv,rv,fringing), paras0, method="nelder-mead",
+    #                        options={"xatol": 1e-6, "maxiter": 1e5,"initial_simplex":initial_simplex,"disp":False})
+
+    # updated June 3, 2022 from JB's suggestion
     res = minimize(lambda paras: psg_wavcal_nloglike(paras, x,spectrum,spec_err,star_func,telluric_wvs,psg_tuple,N_nodes_wvs,blaze_chunks,fitsrv,rv,fringing), paras0, method="nelder-mead",
-                           options={"xatol": 1e-6, "maxiter": 1e5,"initial_simplex":initial_simplex,"disp":False})
+                           options={"xatol":np.inf,"fatol":0.1,"maxiter": 5e3,"initial_simplex":initial_simplex,"disp":False})
     out = res.x
 
     spl = InterpolatedUnivariateSpline(x_knots, out[0:N_nodes_wvs], k=3, ext=0)
