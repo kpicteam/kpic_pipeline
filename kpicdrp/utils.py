@@ -125,7 +125,7 @@ def convolve_spectrum_line_width(wvs,spectrum,line_widths,mypool=None):
         return conv_spectrum
 
 
-def stellar_spectra_from_files(dataset):
+def stellar_spectra_from_files(dataset, use_header=False):
     """"
     Combines extracted stellar spectra from a sequence of observations of the star. 
     For a given fiber, it identifies the files where the star was observed on this particular fiber, and combines the
@@ -133,7 +133,8 @@ def stellar_spectra_from_files(dataset):
     The final output has the combined spectrum for each fiber.
 
     Args:
-        dataset (data.Dataset): a dataset of Spectrum data of the star on various fibers. 
+        dataset (data.Dataset): a dataset of Spectrum data of the star on various fibers.
+        use_header (bool): if True, uses the header keywords to determine which file corresponds to which fiber 
     Returns:
         combined_spec: (Nfibers, Norders, Npix) Combined spectra [note that Nfibers only corresponds to fibers with the star]
         combined_err: (Nfibers, Norders, Npix) Combined error
@@ -147,8 +148,19 @@ def stellar_spectra_from_files(dataset):
     all_err_arr = np.concatenate(err_list)
     baryrv_list = np.array(dataset.get_header_values('BARYRV'))
 
-    whichfiber = np.argmax(np.nansum(all_spec_arr, axis=(2, 3)),axis=1)
-    unique_fibers = np.sort(np.unique(whichfiber)) # all fibers with starlight
+    if not use_header:
+        whichfiber = np.argmax(np.nansum(all_spec_arr, axis=(2, 3)),axis=1)
+        unique_fibers = np.sort(np.unique(whichfiber)) # all fibers with starlight
+        unique_fiber_labels = [dataset[0].labels[fib] for fib in unique_fibers]
+    else:
+        unique_fiber_labels = list(dataset.fib_indices.keys())
+        whichfiber = np.zeros(len(dataset), dtype=int)
+        unique_fibers = []
+        for fib, fib_label in enumerate(unique_fiber_labels):
+            for index in dataset.fib_indices[fib_label]:
+                whichfiber[index] = fib
+            unique_fibers.append(fib)
+        unique_fibers = np.array(unique_fibers)
 
     combined_spec = np.zeros(all_spec_arr.shape[1::])
     combined_err = np.zeros(all_spec_arr.shape[1::])
@@ -158,8 +170,6 @@ def stellar_spectra_from_files(dataset):
         spec_sig_list = all_err_arr[np.where(fib == whichfiber)[0], fib, :, :]
         baryrv[fib] = np.mean(baryrv_list[np.where(fib == whichfiber)[0]])
         combined_spec[fib, :, :], combined_err[fib, :, :] = combine_stellar_spectra(spec_list, spec_sig_list)
-
-    unique_fiber_labels = [dataset[0].labels[fib] for fib in unique_fibers]
 
     combined_spectra = data.Spectrum(fluxes=combined_spec[unique_fibers], errs=combined_err[unique_fibers], header=dataset[0].header, labels=unique_fiber_labels)
     combined_spectra.filedir = dataset[0].filedir
