@@ -9,6 +9,9 @@ import kpicdrp.trace as trace
 import kpicdrp.extraction as extraction
 from kpicdrp import throughput 
 import matplotlib.pyplot as plt
+from astroquery.simbad import Simbad
+from astroquery.vizier import Vizier
+from datetime import datetime
 
 def get_filenums(range_info):
     filenums = np.array([], dtype=int)
@@ -61,7 +64,7 @@ def parse_header_night(raw_dir):
 
     all_target, all_targetold, all_utdate, all_uttime, all_exptime, all_filename = [], [], [], [], [], []
     all_elev, all_airmass = [], []
-    all_sf, all_mask = [], []
+    all_sf, all_mask, all_fiucgx = [], [], []
     all_dar, all_offset, all_fnum, all_echlpos, all_disppos, all_filt = [], [], [], [], [], []
 
     for file in glob(raw_dir + '/*.fits'):
@@ -95,15 +98,22 @@ def parse_header_night(raw_dir):
             all_sf.append(this_hdr['FIUGNM'])
             all_offset.append(this_hdr['FIUDSEP'])
             all_dar.append(this_hdr['FIUDAR'])
-            all_mask.append(this_hdr['FIUCGNAM'])
+            # Not in header for 2021 11 19 night
+            try:
+                all_mask.append(this_hdr['FIUCGNAM'])
+                all_fiucgx.append(this_hdr['FIUCGX'])
+            except:
+                all_mask.append('pupil_mask')
+                all_fiucgx.append(1.88)
+            
             all_filt.append(this_hdr['FILTER'])
             all_echlpos.append(this_hdr['ECHLPOS'])
             all_disppos.append(this_hdr['DISPPOS'])
 
     dict_keys = ['FILENUM', 'TARGNAME', 'UTDATE', 'UTTIME', 'TRUITIME', 'EL', 'SFNUM', 'FIUDSEP', 'DAR', 'AIRMASS', 
-    'FILEPATH', 'FILTER', 'CORONAGRAPH', 'ECHLPOS', 'DISPPOS', 'TARGNAME_ORIG']
+    'FILEPATH', 'FILTER', 'CORONAGRAPH', 'FIUCGX', 'ECHLPOS', 'DISPPOS', 'TARGNAME_ORIG']
     info_df = pd.DataFrame(list(zip(all_fnum, all_target, all_utdate, all_uttime, all_exptime, all_elev, all_sf,
-                         all_offset, all_dar, all_airmass, all_filename, all_filt, all_mask, all_echlpos, all_disppos, all_targetold)),
+                         all_offset, all_dar, all_airmass, all_filename, all_filt, all_mask, all_fiucgx, all_echlpos, all_disppos, all_targetold)),
                         columns=dict_keys)
 
     unique_targets = np.unique(all_target)
@@ -135,6 +145,9 @@ def do_extract_1d(filelist, out_flux_dir, out_filenames, use_nod_sub=True, mypoo
         sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True)
         print('Extracting 2D frame.')
         fit_background = True
+
+    print('fit background')
+    print(fit_background)
 
     # extract the 1D fluxes
     spectral_dataset = extraction.extract_flux(sci_dataset, trace_dat, fit_background=fit_background,
@@ -195,16 +208,22 @@ def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_f
         os.makedirs(nodsub_dir)
 
     # first do nod subtraction. Somewhat arbitrary. MAKE IT SMARTER??
-    if len(inds) < 12:
-        sub_mode = 'nod'  # good default, pair requires e.g. 23232323 sequences
-    else:
-        sub_mode = 'pair'
-
-    if 'HD984' in target_date_dir:
+    # if len(inds) < 12:
+    #     sub_mode = 'nod'  # good default, pair requires e.g. 23232323 sequences
+    # else:
+    #     sub_mode = 'pair'
+    sub_mode = 'nod'
+    if 'HD984' in target_date_dir or 'HR8799b' in target_date_dir:
         sub_mode == 'pair'
 
     # do nod sub on all available frames
+    # print(sfnum, sfnum[inds])
     fiber_goals = [ int(s[-1]) for s in sfnum[inds] ]  # pull out sf numbers
+
+    if 'kapAndB' in target_date_dir and '221112' in target_date_dir:
+        fiber_goals[-7] = 2
+        print('Correcting a frame (245) which had wrong SF listed in header.')
+
     print(fiber_goals, these_frames)
     print('Running nod subtraction on all frames')
     nodsub_frames = do_nod_subtract(these_frames, sub_mode, fiber_goals, nodsub_dir)
@@ -215,6 +234,8 @@ def run_nod(target_files, target_date_dir, inds, sfnum, out_flux_dir, existing_f
     new_inds = np.where(np.isin(all_frames, existing_frames) == False)[0]  # pick out indices of new frames
     new_frames = np.asarray(nodsub_frames)[new_inds]
     out_filenames = [f.split('raw_pairsub/')[1].replace('_nodsub.fits', '_nodsub_spectra.fits') for f in new_frames]
+    print(new_inds)
+    print(these_frames)
     filenums = [f[-9:].split('.fits')[0] for f in these_frames[new_inds]]
 
     # print(new_inds)
@@ -277,7 +298,7 @@ def rsync_files(these_frames, target_raw):
 def save_bad_frames(obsdate, df, df_path):
     bad_frames = []
     if obsdate == '20220723':
-        bad = [197,177,178,179,180,181]
+        bad = [197,]
         saturated = np.linspace(153, 164, 12, dtype=int)
         l_band = np.linspace(441, 468, 28, dtype=int)
         bad_frames = np.append(np.asarray(bad), saturated)
@@ -290,8 +311,23 @@ def save_bad_frames(obsdate, df, df_path):
         bad = np.linspace(87, 146, 60, dtype=int)
         bad_frames = np.append(bad, np.array([177,]))
 
-    ## Add if there are bad frames for a date
+    elif obsdate == '20221007':
+        bad_frames = [160,161,201,202,203,204,205,206]
 
+    elif obsdate == '20221012':
+        bad_frames = [710,711,712,1,276]
+
+    elif obsdate == '20221011':
+        bad_frames = [1,2,3]
+
+    elif obsdate == '20211119':
+        bad_frames = [47]
+    elif obsdate == '20221112':
+        bad_frames = [109,110,111,112,113,130,131,132]
+    elif obsdate == '20221113':
+        bad_frames = [547,548,549,603]
+
+    ## Add if there are bad frames for a date
     # initialize all to 0 (good)
     df.insert(10, "BADFRAME", '')
     df['BADFRAME'] = 0
@@ -305,14 +341,15 @@ def save_bad_frames(obsdate, df, df_path):
 
     return df
 
-def get_throughput(path, wv_soln, k_mag, bb_temp=7000, show_plot=False):
+def get_throughput(path, wv_soln, k_mag, bb_temp=7000, fib=None, show_plot=False):
 
     spec = data.Spectrum(filepath=path)
+    print(spec.labels, wv_soln.labels)
     spec.calibrate_wvs(wv_soln) 
 
     all_wvs = spec._wvs
 
-    peak_thru, thru_all_orders = throughput.calculate_peak_throughput(spec, k_mag, bb_temp=bb_temp, fib=None, plot=show_plot)
+    peak_thru, thru_all_orders = throughput.calculate_peak_throughput(spec, k_mag, bb_temp=bb_temp, fib=fib, plot=show_plot)
 
     return peak_thru, thru_all_orders, all_wvs
 
@@ -330,18 +367,28 @@ def add_spec_column(df, out_filenames, these_frames, out_flux_dir):
 
     return df
 
-def add_thru_column(df, these_frames, all_thru95):
+def add_thru_starmag(df, these_frames, all_thru95, all_thru_file, all_mags, first_target=False):
 
-    # initialize the columns
-    if not 'THRU95' in df.columns:
-        df.insert(16, "THRU95", '')
-        # df.insert(17, "THRUARRAY", '')  
-        # df.insert(18, "WVS", '')  # we only have 1 WVS per night
+    keys = ['THRU95', 'THRUFILE', '2MASSK', 'GaiaG', 'GaiaRP']
 
+    if first_target:
+        # initialize the columns
+        for j, k in enumerate(keys):
+            # delete first so we have a fresh start
+            try:
+                del df[k]
+            except:
+                print('Keys do not exist yet. Inserting...')
+            df.insert(j + 16, k, '')
+        
     # add output spectra name
-    for thru95, raw_f in zip(all_thru95, these_frames):
-        print(thru95)
+    for i, (thru95, raw_f, thru_file) in enumerate(zip(all_thru95, these_frames, all_thru_file)):
         df.loc[df['SPECFILE'] == raw_f, 'THRU95'] = thru95
+        df.loc[df['SPECFILE'] == raw_f, 'THRUFILE'] = thru_file
+
+        df.loc[df['SPECFILE'] == raw_f, '2MASSK'] = all_mags['2MASSK'][i]
+        df.loc[df['SPECFILE'] == raw_f, 'GaiaG'] = all_mags['GaiaG'][i]
+        df.loc[df['SPECFILE'] == raw_f, 'GaiaRP'] = all_mags['GaiaRP'][i]
 
     return df
 
@@ -384,7 +431,7 @@ def read_user_options(opts):
 # Add when we discover more planets!
 # Can we be smarter about this? mostly complicated by systems with more than 1 planet
 def make_comp_dir(target_name, kpicdir, obsdate):
-    if target_name == 'HR8799' or target_name == 'HD206893' or target_name == '51Eri' or target_name == 'PDS70':
+    if target_name == 'HR8799' or target_name == 'HD206893' or target_name == 'PDS70':
         which_planet = input('Enter planet name for '+target_name+' (b (or B), c, d, e?) >>> ')
         which_planet = which_planet.strip()
         comp_name = target_name + which_planet
@@ -393,3 +440,77 @@ def make_comp_dir(target_name, kpicdir, obsdate):
     comp_date_dir, out_flux_dir, target_raw = make_dirs_target(kpicdir, comp_name, obsdate)
 
     return comp_date_dir, out_flux_dir, target_raw, comp_name
+
+def query_starmag(target_name):
+    
+    result_table = Simbad.query_object(target_name)
+    coords = result_table['RA'].data[0] + ',' + result_table['DEC'].data[0]
+    v = Vizier()
+    
+    res_2mass = v.query_region(coords, radius="0d0m10s", catalog='2MASS')
+
+    # Take the brightest star in case there is more than 1. Usually good
+    kmag = res_2mass[0]['Kmag'].data.min()  
+
+    res_gaia = v.query_region(coords, radius="0d0m10s", catalog='Gaia')
+    rpmag = res_gaia['I/355/gaiadr3']['RPmag'].data.min()
+    gmag = res_gaia['I/355/gaiadr3']['Gmag'].data.min()
+
+    return kmag, rpmag, gmag
+
+def add_strehl_data(df, these_frames, ut_times, log_df):
+
+    key = 'STREHL'
+    # delete for fresh start
+    try:
+        del df[key]
+    except:
+        print('Keys do not exist yet. Inserting...')
+    df.insert(24, key, '')
+
+    # all uttimes in log
+    log_df = log_df.loc[log_df['GOALNM'] != 'not tracking']
+    print(log_df.shape)
+    _log_ut = log_df['UT']
+    all_strehl = log_df['STREHL'].values
+
+    log_ut = []
+    for i in _log_ut:
+        log_ut.append(datetime.strptime(i[:-3], '%H:%M:%S'))
+
+    # for each uttime in nightly table, get closest uttime in log
+    for spec_f, this_time in zip(these_frames, ut_times):
+        this_time_obj = datetime.strptime(this_time[:-3], '%H:%M:%S')
+        best = min(log_ut, key=lambda d: abs(d - this_time_obj))
+        for index, j in enumerate(log_ut):
+            if best == j:
+                closest_ind = index
+        closest_strehl = float(all_strehl[closest_ind])
+        
+        print(this_time_obj, best, closest_ind, closest_strehl)
+
+        # add to df - check that strehl makes sense
+        if closest_strehl < 1 and closest_strehl > 0:
+            df.loc[df['SPECFILE'] == spec_f, key] = closest_strehl
+      
+    return df
+
+def get_on_off_axis(night_df, target_name):
+    '''
+    Determine which files are on-axis, e.g. for a host star, and off-axis, for a companion
+    VFN mode observations are deemed "off-axis" in this context
+    '''
+    
+    dist_sep = night_df.loc[night_df['TARGNAME'] == target_name, 'FIUDSEP'].values
+    cgname = night_df.loc[night_df['TARGNAME'] == target_name, 'CORONAGRAPH'].values
+    fiucgx = night_df.loc[night_df['TARGNAME'] == target_name, 'FIUCGX'].values
+
+    # companion or on-axis
+    # using 35 mas, to handle cases where we intentionally offset RV star by 30 mas (prevent saturation...)
+    # usually pupil_mask / Custom for dichroic out / apodizer for MDA. And condition
+    on_axis_ind = np.where( (dist_sep < 35) & ((cgname == 'pupil_mask') | (cgname == 'Custom') | (cgname == 'apodizer') | (cgname == 'pypo_out') | (fiucgx < 5)) & (fiucgx < 5) )[0]
+
+    # VFN mode + off-axis, for a companion. Or condition
+    off_axis_ind = np.where( (dist_sep >= 35) | (cgname == 'vortex') | (fiucgx > 5) )[0]
+
+    return on_axis_ind, off_axis_ind
