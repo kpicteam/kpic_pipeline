@@ -5,7 +5,7 @@ import astropy.constants as consts
 import scipy.optimize as optimize
 import scipy.interpolate as interp
 from PyAstronomy import pyasl
-from . import rotBroadInt
+import kpicdrp.rotBroadInt as rotBroadInt
 
         
 def simple_xcorr(shifts, orders_wvs, orders_fluxes, template_wvs, template_fluxes, telluric_wvs=None, telluric_fluxes=None, orders_responses=None):

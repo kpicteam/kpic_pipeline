@@ -757,7 +757,7 @@ def psg_wavcal_fm(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model
                 telluric_order_spec = telluric_spec[where_order_wvs]
                 stellar_order_spec = stellar_model_spec_avg_func(telluric_order_wvs* (1 - (star_rv-baryrv) / c_kms))
                 if vsini != 0:
-                    from . import rotBroadInt
+                    import kpicdrp.rotBroadInt as rotBroadInt
                     spinbroad_stellar_order_spec = rotBroadInt.rot_int_cmj(telluric_order_wvs, stellar_order_spec, vsini, epsilon=0.1)
                     #spinbroad_stellar_order_spec = pyasl.fastRotBroad(telluric_order_wvs, stellar_order_spec, 0.1, vsini)
                 else:
