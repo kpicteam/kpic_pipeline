@@ -4,8 +4,7 @@ import astropy.units as u
 import astropy.constants as consts
 import scipy.optimize as optimize
 import scipy.interpolate as interp
-from PyAstronomy import pyasl
-
+import kpicdrp.rotBroadInt as rotBroadInt
 
         
 def simple_xcorr(shifts, orders_wvs, orders_fluxes, template_wvs, template_fluxes, telluric_wvs=None, telluric_fluxes=None, orders_responses=None):
@@ -359,8 +358,8 @@ def generate_forward_model_singleorder(fitparams, orders_wvs, order_sigmas,
         if vsini < 0:
             # bad!
             broad_model = np.ones(template_fluxes.shape)
-        else:  
-            broad_model = pyasl.rotBroad(template_wvs, template_fluxes, 0.1, vsini)
+        else:
+            broad_model = rotBroadInt.rot_int_cmj(template_wvs, template_fluxes, vsini)
     else:
         broad_model = template_fluxes
 
@@ -418,7 +417,7 @@ def grid_search(orders_wvs, orders_fluxes, orders_fluxerrs, star_wvs, star_templ
     #         model_in_band = np.where((L1_dat['wvs'] >= np.min(thiswvs)) & (L1_dat['wvs'] <= np.max(thiswvs)))
     #         model_dwv = np.abs(np.median(np.roll(L1_dat['wvs'][model_in_band], 1) - L1_dat['wvs'][model_in_band]))
 
-        broad_model = pyasl.rotBroad(template_wvs, template_fluxes, 0.1, vsini)
+        broad_model = rotBroadInt.rot_int_cmj(template_wvs, template_fluxes, vsini)
         #broad_model = resampled_model_flux
         
         shift_xcorrs = []
@@ -479,8 +478,7 @@ def lsqr_fit(guess, orders, orders_wvs, orders_sigmas, orders_fluxes, orders_flu
         shift, vsini, = fitparams[0:2]
 
         all_diffs = []
-        broad_model = pyasl.rotBroad(template_wvs, template_fluxes, 0.1, vsini)
-
+        broad_model = rotBroadInt.rot_int_cmj(template_wvs, template_fluxes, vsini)
 
         for i, order in enumerate(orders):
             contrast, star_flux = fitparams[2*i+2:2*i+4]
