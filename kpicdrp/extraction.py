@@ -132,7 +132,7 @@ def correct_bad_pixels(raw_frames, badpixmap, detect_cosmics=True, copy=True):
         if detect_cosmics:
             badpixmap4cosmic = np.zeros(badpixmap.data.shape)
             badpixmap4cosmic[np.where(np.isnan(badpixmap.data))] = 1
-            dat_crmap, corr_dat = astroscrappy.detect_cosmics(new_data, inmask=badpixmap4cosmic.astype(np.bool))
+            dat_crmap, corr_dat = astroscrappy.detect_cosmics(new_data, inmask=badpixmap4cosmic.astype(np.bool_))
             new_data[dat_crmap] = np.nan
         new_data[np.where(np.isnan(badpixmap.data))] = np.nan
 
