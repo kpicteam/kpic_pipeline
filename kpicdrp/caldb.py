@@ -62,7 +62,8 @@ class CalDB():
             row_index = self.db[self.db["Filepath"]== os.path.abspath(entry.filepath)].index.values
             self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.type, entry.time_obs.isot]
         else:
-            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs.isot]], columns = self.columns), ignore_index = True)
+            new_entry = pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs.isot]], columns = self.columns)
+            self.db = pd.concat([self.db, new_entry], ignore_index = True)
 
 
     def remove_entry(self, entry):
@@ -142,8 +143,9 @@ class DetectorCalDB(CalDB):
             row_index= self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
             self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.type, entry.time_obs.isot ,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"],entry.header["ECHLPOS"],entry.header["DISPPOS"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs.isot ,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"],entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
-
+            new_entry = pd.DataFrame([[os.path.abspath(entry.filepath), entry.type, entry.time_obs.isot ,entry.header["TRUITIME"],entry.header["COADDS"],entry.header["DRPNFILE"],entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns)
+            self.db = pd.concat([self.db, new_entry], ignore_index = True)
+            
     def get_calib(self, file, type=""):
         """
         Outputs the best background or bad pixel map calibration file (same Integration Time and Coadds, >1 # of Files Used, and then searches for the most similar time) to use when a raw file is inputted
@@ -300,7 +302,8 @@ class TraceCalDB(CalDB):
             row_index= self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
             self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.time_obs.isot, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.time_obs.isot, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
+            new_entry = pd.DataFrame([[os.path.abspath(entry.filepath), entry.time_obs.isot, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns)
+            self.db = pd.concat([self.db, new_entry], ignore_index = True)
 
     def get_calib(self, file):
         """
@@ -395,7 +398,8 @@ class WaveCalDB(CalDB):
             row_index= self.db[self.db["Filepath"]==os.path.abspath(entry.filepath)].index.values
             self.db.loc[row_index,self.columns] = [os.path.abspath(entry.filepath), entry.method, entry.time_obs.isot, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]
         else:
-            self.db = self.db.append(pd.DataFrame([[os.path.abspath(entry.filepath), entry.method, entry.time_obs.isot, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns), ignore_index = True)
+            new_entry = pd.DataFrame([[os.path.abspath(entry.filepath), entry.method, entry.time_obs.isot, s1_val, s2_val, s3_val, s4_val, c0_val, c1_val, entry.header["ECHLPOS"],entry.header["DISPPOS"]]], columns = self.columns)
+            self.db = pd.concat([self.db, new_entry], ignore_index = True)
 
     def get_calib(self, file):
         """
