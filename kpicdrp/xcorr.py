@@ -137,7 +137,8 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         star_template_fluxes = [star_template_fluxes, ]
         template_wvs = [template_wvs,]
         template_fluxes = [template_fluxes,]
-        orders_responses = orders_responses.reshape([1, orders_responses.shape[0], orders_responses.shape[1] ])
+        if orders_responses is not None:
+            orders_responses = orders_responses.reshape([1, orders_responses.shape[0], orders_responses.shape[1] ])
 
     fluxes = []
     star_fluxes = []
