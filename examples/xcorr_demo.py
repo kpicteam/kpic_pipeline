@@ -9,6 +9,7 @@ import scipy.ndimage as ndi
 import os
 import multiprocessing as mp
 import astropy.units as u
+import copy
 
 import matplotlib.pylab as plt
 
@@ -72,13 +73,15 @@ for num in filenums:
     all_errors.append(err)
 
 all_fluxes = np.array(all_fluxes)
-all_errors = np.array(all_errors)
+all_errors = np.array(all_errors) 
+all_weights = 1/np.square(copy.copy(all_errors))
 
 print(np.nanmean(all_fluxes, axis=(1,2)))
 
-# combine in time
-tot_fluxes = np.nansum(all_fluxes, axis=0)
-tot_errors = np.sqrt(np.nansum(all_errors**2, axis=0))
+# combine in time with weighted mean, ignore nans
+not_nan = np.logical_not(np.isnan(all_fluxes))
+tot_fluxes = np.average(all_fluxes[not_nan], weights= all_weights[not_nan], axis=0)
+tot_errors = 1./np.sqrt(np.sum(all_weights[not_nan], axis=0))
 
 sf2_fluxes = tot_fluxes[1]
 sf2_fluxes[:,:50] = np.nan
