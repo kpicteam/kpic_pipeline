@@ -15,14 +15,12 @@ This will create a configuration file at `~/.kpicdrp` that will specify the path
 ### Pipeline to extract 1D spectrum for a night
 
 ## Pre-requisites: 
-Before running, you need to have the
-1) Trace file
-2) Bad pixel maps and backgrounds 
-for the night. This can be done with the relevant demo files in the examples folder.
-3) Files for the night downloaded
-4) Edit the following directories if not on hcig1: kpicdir, raw_datadir in the beginning of the script
+Before running, you need to generate the following. Example scripts are provided in the examples folder.
+1) calib_info file which specifies which frames are background, wavecal, and trace (calib_info.py)
+2) Bad pixel maps and backgrounds (calc_background.py)
+3) Trace file (calc_trace.py)
 
-The code is in the examples folder, with the name run_extraction_night.py. You run it with: 
+The nightly pipeline is called run_extraction_night.py. You run it with: 
 
     > python run_extraction_night.py
    
