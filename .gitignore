@@ -4,3 +4,5 @@ kpicdrp.egg-info/*
 examples/*.fits
 caldb_*.csv
 jbdrp/*
+*.DS_Store
+kpicdrp/.DS_Store
