@@ -13,6 +13,8 @@ This will create a configuration file at `~/.kpicdrp` that will specify the path
 
 caldb_detector.csv defines the location of the thermal background as a function of exposure time as well as the bad pixel map. caldb_traces.csv defines the location of the trace normally using bright A0V stars. caldb_wavecal.csv defines the wavelength solution, typically using bright early M giant star spectra. Note that when you rerun the trace or wavelength calibration using a different target or model, you will need to remove the earlier entry to ensure the most recent files are properly used in the following steps.
 
+To make use of our wavelength calibration routine, you will need to download initial guesses from our [Public KPIC Data](https://drive.google.com/drive/folders/1eE3z_tbaXViGJCNN3dJswu4HeYBTa0hl) if you have not reduced any KPIC data yet. There are also examples of raw and reduced KPIC spectra on the drive for you to compare.
+
 ### Pipeline to extract 1D spectrum for a night
 
 ## Pre-requisites: 
@@ -58,7 +60,7 @@ Select a location on your machine to store, process, and reduce data
     > mkdir raw
 
 * Move the pertinent files to this directory 
-* Make a copy of the background_demo.py script from /kpic_pipeline/examples and change the paths to match where the data is  
+* Make a copy of the [background_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/background_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is  
 
  
 Output should give files like: [bkgd_fileprefix]_background_med_nobars_tint1.47528_coadds1.fits and [bkgd_fileprefix] _persistent_badpix_nobars_tint1.47528_coadds1.fits for each true integration time (tint) used  
@@ -80,7 +82,7 @@ Result should look like ￼
 >	mkdir raw
 
 
-* Make a copy of the trace_demo.py script from /kpic_pipeline/examples and change the paths to match where the data is
+* Make a copy of the [trace_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/trace_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is
 
   <img width="800" alt="2__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/bc250661-eb85-4899-a317-a9df8ef06b4f">
   
@@ -106,7 +108,7 @@ The star fibers 1-4 are labeled in s1, s2, s3, s4, respectively, whereas the bac
 > mkdir raw
 
 
-* Make a copy of the extraction_demo.py script from /kpic_pipeline/examples and change the paths to match where the data is￼  
+* Make a copy of the [extraction_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/extraction_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is￼  
 
  <img width="787" alt="4__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/3c507353-2dc2-4826-879b-a53dec95f46a">
 
@@ -122,13 +124,13 @@ The star fibers 1-4 are labeled in s1, s2, s3, s4, respectively, whereas the bac
 
 ## Wavelength Calibration 
 
-KPIC uses a bright early M giant star which utilizes CO lines as well as earth telluric absorption to extract the wavelength solutions. The three best orders in K band for science analyses are orders 31-33 (2.29-2.49 micron), but KPIC wavelength calibraiton attempts to provide the wavelength solutions for all nine NIRSPEC orders 31-39.
+KPIC uses a bright early M giant star which utilizes CO lines as well as earth telluric absorption to extract the wavelength solutions. The three best orders in K band for science analyses are orders 31-33 (2.29-2.49 microns), but KPIC wavelength calibration attempts to provide the wavelength solutions for all nine NIRSPEC orders 31-39. To enable this routine, make sure that you have downloaded the initial guesses and earth atmosphere models from the [utils](https://drive.google.com/drive/folders/1wKh21-kfQ4l7wPW_muy1ikWvgigWKRxV) folder in the [Public KPIC Data](https://drive.google.com/drive/folders/1eE3z_tbaXViGJCNN3dJswu4HeYBTa0hl). The initial guesses of the wavelength solutions are 'first_guess_wvs_20200607_HIP_81497.fits' or 'first_guess_wvs_20200928_HIP_81497.fits'. To model the M giant stellar atmosphere, the KPIC DRP uses PHOENIX-ACES-AGSS-COND-2011 models at a given effective and surface gravity (e.g. HIP81497_lte03600-1.00-0.0.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits) and requires an input radial velocity for the M giant spectra.
 
 * Make a calib folder for wavelength calibration in KPIC_Campaign 
 > cd /mykpicdatadir/calibs/20220721 (replace with your date and directory)  
 > mkdir wave;cd wave  
 
-* Make a copy of the wavecal_demo.py script from /kpic_pipeline/examples and change the paths to match where the data is (Be careful here, there is a lot to change) 
+* Make a copy of the [wavecal_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/wavcal_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is (Be careful here, there is a lot to change) 
 
  <img width="1000" alt="6__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/a9af6655-cf43-4e52-8fcf-fe95bb42e271">
  
