@@ -11,6 +11,7 @@ This will create a configuration file at `~/.kpicdrp` that will specify the path
   * caldb_traces.csv
   * caldb_wavecal.csv
 
+caldb_detector.csv defines the location of the thermal background as a function of exposure time as well as the bad pixel map. caldb_traces.csv defines the location of the trace normally using bright A0V stars. caldb_wavecal.csv defines the wavelength solution, typically using bright early M giant star spectra. Note that when you rerun the trace or wavelength calibration using a different target or model, you will need to remove the earlier entry to ensure the most recent files are properly used in the following steps.
 
 ### Pipeline to extract 1D spectrum for a night
 
@@ -38,13 +39,12 @@ Outline 
 * RV Standard Flux Extraction 
 * RV Standard Wavelength Calibration 
 * Target Flux Extraction 
-* Cross Correlation  
 
 ## Background/Bad Pixel Finding 
 
 Select a location on your machine to store, process, and reduce data
 * Output locations are flexible in data reduction scripts
-* Identify which nspec files are Background exposures via the nightly log 
+* Identify which nspec files are Background exposures
 * Make a folder and copy valid background files for the night
 
     > cd /mykpicdatadir/
@@ -59,11 +59,9 @@ Select a location on your machine to store, process, and reduce data
 
 * Move the pertinent files to this directory 
 * Make a copy of the background_demo.py script from /kpic_pipeline/examples and change the paths to match where the data is  
-		
-￼
 
  
-Output should give files like: [bkgd_fileprefix]_background_med_nobars_tint1.47528_coadds1.fits and [bkgd_fileprefix] _persistent_badpix_nobars_tint1.47528_coadds1.fits for each tint used  
+Output should give files like: [bkgd_fileprefix]_background_med_nobars_tint1.47528_coadds1.fits and [bkgd_fileprefix] _persistent_badpix_nobars_tint1.47528_coadds1.fits for each true integration time (tint) used  
 
 <img width="800" alt="unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/9fd4637e-d60d-419f-9117-0d60d4648cc3">
 
@@ -73,7 +71,7 @@ Result should look like ￼
 
   
 ## Trace Finding 
-* Identify which nspec files are telluric calibrator exposures via nightly log 
+* Identify which nspec files are telluric calibrator (A0V star) exposures
 * Make a folder for trace and copy valid data files  
 >	cd ~/mykpicdatadir/date/  (replace with your specific path)
 
@@ -87,8 +85,11 @@ Result should look like ￼
   <img width="800" alt="2__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/bc250661-eb85-4899-a317-a9df8ef06b4f">
   
 * Output should give files like: nspec221009_[filenumber]_trace.fits 
-* Output should look something like: ￼ 
+* Output should look something like: ￼
+
 ![3__#$!@%!#__unknown](https://github.com/kpicteam/kpic_pipeline/assets/74935396/fd11045c-0f57-426c-9902-6eb790156c0c)
+
+The star fibers 1-4 are labeled in s1, s2, s3, s4, respectively, whereas the background/dark traces are in between these fibers are labeled as b0, b1, b2, b3, or d0, d1, d2, d3.
 
 ## Flux Extraction 
 * Start with the wavelength calibrator/RV standard (e.g. HIP 81497 on 20220721) 
@@ -120,19 +121,23 @@ Result should look like ￼
 
 
 ## Wavelength Calibration 
+
+KPIC uses a bright early M giant star which utilizes CO lines as well as earth telluric absorption to extract the wavelength solutions. The three best orders in K band for science analyses are orders 31-33 (2.29-2.49 micron), but KPIC wavelength calibraiton attempts to provide the wavelength solutions for all nine NIRSPEC orders 31-39.
+
 * Make a calib folder for wavelength calibration in KPIC_Campaign 
 > cd /mykpicdatadir/calibs/20220721 (replace with your date and directory)  
 > mkdir wave;cd wave  
 
 * Make a copy of the wavecal_demo.py script from /kpic_pipeline/examples and change the paths to match where the data is (Be careful here, there is a lot to change) 
 
- <img width="800" alt="6__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/a9af6655-cf43-4e52-8fcf-fe95bb42e271">
+ <img width="1000" alt="6__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/a9af6655-cf43-4e52-8fcf-fe95bb42e271">
  
 
 * Be sure to change the RV value to match the wavecal star you are using￼  
 
  <img width="800" alt="7__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/f2fca401-30c9-4a10-bed2-2cdcfbccc075">
  
+If the wavelength solution is bad, you can try to use another initial wavelength solution file as a starting point, or you can widen the grid search delta wavelength (grid_dwv) from 1e-4 to 3e-4 microns. These should in principle provide a reasonable wavelength calibration.
 
 * File outputs should look like: 20220721_HIP81497_psg_wvs.fits  
 * The script will plot images for each fiber to show how the wavelength solution fits and save the plots; make sure these are in the wave directory as well 
