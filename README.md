@@ -15,24 +15,11 @@ caldb_detector.csv defines the location of the thermal background as a function 
 
 To make use of our wavelength calibration routine, you will need to download initial guesses from our [Public KPIC Data](https://drive.google.com/drive/folders/1eE3z_tbaXViGJCNN3dJswu4HeYBTa0hl) if you have not reduced any KPIC data yet. There are also examples of raw and reduced KPIC spectra on the drive for you to compare.
 
-## Pipelines to extract 1D spectrum
+# Pipelines to extract 1D spectrum
 
-## Instructions to Reduce Nightly Data
-Before running, you need to generate the following. Example scripts are provided in the examples folder.
-1) calib_info file which specifies which frames are background, wavecal, and trace (calib_info.py)
-2) Bad pixel maps and backgrounds (calc_background.py)
-3) Trace file (calc_trace.py)
-
-The nightly pipeline is called run_extraction_night.py. You run it with: 
-
-    > python run_extraction_night.py
-   
-To run in real time (during observing), you need to constantly read the new files. Nodding is recommended since you might not have backgrounds. Run:
-
-    > python run_extraction_night.py --nod_only=y --new_files=y --plot=y
-
+There are two instructions to reduce the observed KPIC data into 1D spectra. One is "Instructions to Reduce Individual Datasets", which reduces only one given science target. The other is "Instructions to Reduce Nightly Data", which reduces all data observed within the same night altogether. Users who would like to reduce the full nightly data using the latter method are encouraged to try the method to reduce individual targets to understand how the KPIC DRP is reducing the spectra.
      
-## Instructions to Reduce Individual Datasets
+# Instructions to Reduce Individual Datasets
 ## DRP Steps  
 
 Outline 
@@ -178,4 +165,18 @@ If the wavelength solution is bad, you can try to use another initial wavelength
 
 ￼
 ## Rinse and Repeat Flux Extraction for all Host/Companions/Targets that you wish to analyze 
- 
+
+# Instructions to Reduce Nightly Data
+Before running, you need to generate the following. Example scripts are provided in the examples folder.
+1) calib_info file which specifies which frames are background, wavecal, and trace (calib_info.py)
+2) Bad pixel maps and backgrounds (calc_background.py)
+3) Trace file (calc_trace.py)
+
+The nightly pipeline is called run_extraction_night.py. You run it with: 
+
+    > python run_extraction_night.py
+   
+To run in real time (during observing), you need to constantly read the new files. Nodding is recommended since you might not have backgrounds. Run:
+
+    > python run_extraction_night.py --nod_only=y --new_files=y --plot=y
+
