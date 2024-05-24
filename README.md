@@ -17,7 +17,7 @@ To make use of our wavelength calibration routine, you will need to download ini
 
 ### Pipeline to extract 1D spectrum for a night
 
-## Pre-requisites: 
+## Pipeline Instructions to Reduce Nightly Data: 
 Before running, you need to generate the following. Example scripts are provided in the examples folder.
 1) calib_info file which specifies which frames are background, wavecal, and trace (calib_info.py)
 2) Bad pixel maps and backgrounds (calc_background.py)
@@ -80,7 +80,7 @@ Result should look like ￼
 * Identify which nspec files are telluric calibrator (A0V star) exposures
 * Make a folder for trace and copy valid data files
 ```
-cd ~/mykpicdatadir/date/  (replace with your specific path)
+cd ~/mykpicdatadir/20221009/  (replace with your path and date)
 ```
 ```
 mkdir trace  
