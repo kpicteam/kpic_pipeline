@@ -35,6 +35,10 @@ df_dir = os.path.join(kpicdir, 'nightly_tables')
 # where raw data is stored. This should be a copy of the spec/ folder from Keck
 # So you should probably only change "/scr3/kpic/Data/""
 raw_datadir = os.path.join("/scr3/kpic/Data/", obsdate[2:], "spec")
+
+# for May 02, 2023
+# raw_datadir = os.path.join("/scr3/kpic/Data/", obsdate[2:], "fixed_spec")
+
 if len(glob( os.path.join(raw_datadir, "*.fits")) ) == 0:
     raw_datadir = os.path.join("/scr3/kpic/Data/", obsdate[:4], obsdate[2:], "spec")
 if len(glob( os.path.join(raw_datadir, "*.fits")) ) == 0:
@@ -77,6 +81,7 @@ print(unique_targets)
 
 # iterate over target
 for target_name in unique_targets:
+    # if target_name == 'HIP99770':
     print('Onto ' + target_name)
     # make folders for the target
     target_date_dir, out_flux_dir, target_raw = make_dirs_target(kpicdir, target_name, obsdate)
@@ -99,8 +104,13 @@ for target_name in unique_targets:
             nod_ind = np.where(exptime > -1)[0]  # everything
             bkgd_ind = np.array([])  # empty for bkgd ind
         else:
-            bkgd_ind = np.where(exptime < 15)[0]
-            nod_ind = np.where(exptime >= 15)[0]  # To do: this breaks if there is only 1 SF
+            time_lim = 8
+            # bkgd_ind = np.where(exptime < 8)[0]
+            # nod_ind = np.where(exptime >= 8)[0]  # To do: this breaks if there is only 1 SF
+            bkgd_ind = np.where(exptime < time_lim)[0]
+            nod_ind = np.where(exptime >= time_lim)[0]  # To do: this breaks if there is only 1 SF
+            if time_lim > 30:
+                print('HACKING! Criteria for nod sub is exptime > ' + str(time_lim))
 
     # return indices of intersections between on/off axis and exptime
     # Case 1: bkgd and on-axis
@@ -130,8 +140,12 @@ for target_name in unique_targets:
             print(target_name + ' has already been extracted.')
             _out_filenames = np.sort(glob(os.path.join(out_flux_dir, "*.fits")))
             out_filenames = [p.replace(out_flux_dir+'/', '') for p in _out_filenames]
-            
+        
+        print( len(out_filenames), len(these_frames))
+        print(out_filenames)
+        print(these_frames)
         assert len(out_filenames) == len(these_frames)
+
         orig_night_df = add_spec_column(orig_night_df, out_filenames, these_frames, out_flux_dir)
 
     # off axis, bkgd sub

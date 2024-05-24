@@ -44,7 +44,6 @@ def get_filelist(raw_dir, filenums, filestr, raw_datadir):
         
         # remake filelist if this is the case
         #filelist = glob(os.path.join(raw_dir, "*.fits"))
-
         # only get files corresponding to input filenums
         filelist = [ os.path.join(raw_dir, filestr.format(i)) for i in filenums]
 
@@ -71,44 +70,46 @@ def parse_header_night(raw_dir):
         this_hdr = fits.open(file)[0].header
 
         # all kinds of names non-science frames might have
-        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOUL WEATHER' and this_hdr['TARGNAME'] != '':
+        # TEMPORARILY REMOVE THIS FOR VFN DAYCAL data on 2023/08/04 
+        # and this_hdr['TARGNAME'] != 'unknown' 
+        if this_hdr['TARGNAME'] != 'HORIZON STOW' and this_hdr['TARGNAME'] != 'unknown' and this_hdr['TARGNAME'] != 'FOUL WEATHER' and this_hdr['TARGNAME'] != '' and this_hdr['TARGNAME'] != 'CRTRT2tertiar' and this_hdr['TARGNAME'] != 'Neptune13:30' and this_hdr['TARGNAME'] != 'SN' and this_hdr['TARGNAME'] != '2024ggi':
             
             # only K band for now
-            # if this_hdr['FILTER'] == 'Kband-new':
-            # clean up names to conform to hcig1 convention
-            targname_orig = this_hdr['TARGNAME']
-            targname_new = targname_orig.replace('-', '')
-            if 'Her' in targname_orig:  # for ups_Her
-                targname_new = targname_new.replace(' ', '_')
-            else:
-                targname_new = targname_new.replace(' ', '')
-            targname_new = targname_new.replace('HIP0', 'HIP')
-            
-            all_target.append(targname_new)
-            all_targetold.append(targname_orig)
+            if this_hdr['FILTER'] == 'Kband-new':
+                # clean up names to conform to hcig1 convention
+                targname_orig = this_hdr['TARGNAME']
+                targname_new = targname_orig.replace('-', '')
+                if 'Her' in targname_orig:  # for ups_Her
+                    targname_new = targname_new.replace(' ', '_')
+                else:
+                    targname_new = targname_new.replace(' ', '')
+                targname_new = targname_new.replace('HIP0', 'HIP')
+                
+                all_target.append(targname_new)
+                all_targetold.append(targname_orig)
 
-            all_utdate.append(this_hdr['DATE-OBS'])
-            all_uttime.append(this_hdr['UT'])
+                all_utdate.append(this_hdr['DATE-OBS'])
+                all_uttime.append(this_hdr['UT'])
 
-            all_filename.append(file)
-            all_fnum.append(this_hdr['FRAMENUM'])
-            all_exptime.append(this_hdr['TRUITIME'])
-            all_elev.append(this_hdr['EL'])
-            all_airmass.append(this_hdr['AIRMASS'])
-            all_sf.append(this_hdr['FIUGNM'])
-            all_offset.append(this_hdr['FIUDSEP'])
-            all_dar.append(this_hdr['FIUDAR'])
-            # Not in header for 2021 11 19 night
-            try:
-                all_mask.append(this_hdr['FIUCGNAM'])
-                all_fiucgx.append(this_hdr['FIUCGX'])
-            except:
-                all_mask.append('pupil_mask')
-                all_fiucgx.append(1.88)
-            
-            all_filt.append(this_hdr['FILTER'])
-            all_echlpos.append(this_hdr['ECHLPOS'])
-            all_disppos.append(this_hdr['DISPPOS'])
+                all_filename.append(file)
+                all_fnum.append(this_hdr['FRAMENUM'])
+                all_exptime.append(this_hdr['TRUITIME'])
+                all_elev.append(this_hdr['EL'])
+                all_airmass.append(this_hdr['AIRMASS'])
+                all_sf.append(this_hdr['FIUGNM'])
+                all_offset.append(this_hdr['FIUDSEP'])
+                all_dar.append(this_hdr['FIUDAR'])
+                # Not in header for 2021 11 19 night
+                try:
+                    all_mask.append(this_hdr['FIUCGNAM'])
+                    all_fiucgx.append(this_hdr['FIUCGX'])
+                except:
+                    all_mask.append('pupil_mask')
+                    all_fiucgx.append(1.88)
+                
+                all_filt.append(this_hdr['FILTER'])
+                all_echlpos.append(this_hdr['ECHLPOS'])
+                all_disppos.append(this_hdr['DISPPOS'])
 
     dict_keys = ['FILENUM', 'TARGNAME', 'UTDATE', 'UTTIME', 'TRUITIME', 'EL', 'SFNUM', 'FIUDSEP', 'DAR', 'AIRMASS', 
     'FILEPATH', 'FILTER', 'CORONAGRAPH', 'FIUCGX', 'ECHLPOS', 'DISPPOS', 'TARGNAME_ORIG']
@@ -306,10 +307,34 @@ def save_bad_frames(obsdate, df, df_path):
 
     elif obsdate == '20220722':
         bad_frames = [197,198,199]
+    elif obsdate == '20230629':
+        bad_frames = [284,296,255]
+    elif obsdate == '20230702':
+        bad_frames = [318]
+    elif obsdate == '20230616':
+        bad_frames = np.linspace(1, 35, 36, dtype=int)
+
+    elif obsdate == '20230509':
+        bad_frames = np.linspace(168, 258, 91, dtype=int)
+        bad_frames = np.append(bad_frames, np.array([152,153,154,155]))
+
+    elif obsdate == '20220721':
+        bad_frames = [92,93,94]  # saturated!
+
+    elif obsdate == '20240426':
+        bad_frames = [167, 168, 181]  # saturated!
 
     elif obsdate == '20220718':
         bad = np.linspace(87, 146, 60, dtype=int)
         bad_frames = np.append(bad, np.array([177,]))
+
+    elif obsdate == '20220808':
+        bad_frames = np.linspace(124, 131, 8, dtype=int)  # MDA!
+
+    elif obsdate == '20230804':
+        bad = np.linspace(1, 192, 192, dtype=int)
+        bad2 = np.linspace(254, 313, 60, dtype=int)
+        bad_frames = np.append(bad, bad2)
 
     elif obsdate == '20221007':
         bad_frames = [160,161,201,202,203,204,205,206]
@@ -344,7 +369,7 @@ def save_bad_frames(obsdate, df, df_path):
 def get_throughput(path, wv_soln, k_mag, bb_temp=7000, fib=None, show_plot=False):
 
     spec = data.Spectrum(filepath=path)
-    print(spec.labels, wv_soln.labels)
+    # print(spec.labels, wv_soln.labels)
     spec.calibrate_wvs(wv_soln) 
 
     all_wvs = spec._wvs
@@ -445,14 +470,19 @@ def query_starmag(target_name):
     
     result_table = Simbad.query_object(target_name)
     coords = result_table['RA'].data[0] + ',' + result_table['DEC'].data[0]
+    # print(coords)
     v = Vizier()
     
-    res_2mass = v.query_region(coords, radius="0d0m10s", catalog='2MASS')
+    # res_2mass_large = v.query_region(coords, radius="0d0m20s", catalog='2MASS')
+    # print(res_2mass_large)
+    res_2mass = v.query_region(coords, radius="0d0m15s", catalog='2MASS')
+    # print(res_2mass)
 
     # Take the brightest star in case there is more than 1. Usually good
     kmag = res_2mass[0]['Kmag'].data.min()  
+    # print(kmag)
 
-    res_gaia = v.query_region(coords, radius="0d0m10s", catalog='Gaia')
+    res_gaia = v.query_region(coords, radius="0d0m25s", catalog='Gaia')
     rpmag = res_gaia['I/355/gaiadr3']['RPmag'].data.min()
     gmag = res_gaia['I/355/gaiadr3']['Gmag'].data.min()
 
@@ -466,7 +496,8 @@ def add_strehl_data(df, these_frames, ut_times, log_df):
         del df[key]
     except:
         print('Keys do not exist yet. Inserting...')
-    df.insert(24, key, '')
+    # df.insert(24, key, '')
+    df.insert(20, key, '')
 
     # all uttimes in log
     log_df = log_df.loc[log_df['GOALNM'] != 'not tracking']
@@ -508,9 +539,12 @@ def get_on_off_axis(night_df, target_name):
     # companion or on-axis
     # using 35 mas, to handle cases where we intentionally offset RV star by 30 mas (prevent saturation...)
     # usually pupil_mask / Custom for dichroic out / apodizer for MDA. And condition
-    on_axis_ind = np.where( (dist_sep < 35) & ((cgname == 'pupil_mask') | (cgname == 'Custom') | (cgname == 'apodizer') | (cgname == 'pypo_out') | (fiucgx < 5)) & (fiucgx < 5) )[0]
+    on_axis_ind = np.where( (dist_sep < 40) & (cgname == 'pupil_mask') | (cgname == 'Custom') | (cgname == 'apodizer') | (cgname == 'pypo_out') )[0]
 
     # VFN mode + off-axis, for a companion. Or condition
-    off_axis_ind = np.where( (dist_sep >= 35) | (cgname == 'vortex') | (fiucgx > 5) )[0]
+    #print(cgname)
+    off_axis_ind = np.where( (dist_sep >= 40) | (cgname == 'vortex') | (cgname == 'pypo_vortex') | (cgname == 'vortex_ch1') | (cgname == 'vortex_ch2') )[0]
+    # off_axis_ind = np.where(cgname == 'vortex_ch2')
+    # off_axis_ind = np.where(cgname == 'vortex_ch1')
 
     return on_axis_ind, off_axis_ind
