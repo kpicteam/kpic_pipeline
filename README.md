@@ -65,7 +65,7 @@ mkdir raw
 ```
 
 * Move the pertinent files to this directory 
-* Make a copy of the [background_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/background_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is  
+* Make a copy of the [background_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/main/examples/background_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is  
 
 <img width="800" alt="unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/9fd4637e-d60d-419f-9117-0d60d4648cc3">
  
@@ -89,7 +89,7 @@ mkdir trace  
 mkdir raw
 ```
 
-* Make a copy of the [trace_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/trace_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is
+* Make a copy of the [trace_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/main/examples/trace_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is
 
 <img width="902" alt="Screenshot 2024-05-13 at 11 02 16 AM" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/f8b3845d-cc3a-4c38-9747-2be4b4ca698c">
 
@@ -120,7 +120,7 @@ mkdir 20220721;cd 20220721 (swap date with your observation date)
 mkdir raw
 ```
 
-* Make a copy of the [extraction_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/extraction_demo.py) script from /kpic_pipeline/examples
+* Make a copy of the [extraction_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/main/examples/extraction_demo.py) script from /kpic_pipeline/examples
 * There are a few options to note in this script:
     * A choice of a box extraction or optimal extraction
     * A choice of the background subtraction method, either using the main background file or using a nod subtraction if your dataset uses fiber bouncing during observation
@@ -159,7 +159,7 @@ cd /mykpicdatadir/calibs/20220721 (replace with your date and directory)
 mkdir wave;cd wave
 ```
 
-* Make a copy of the [wavecal_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/mod_readme/examples/wavcal_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is (Be careful here, there is a lot to change) 
+* Make a copy of the [wavecal_demo.py](https://github.com/kpicteam/kpic_pipeline/blob/main/examples/wavcal_demo.py) script from /kpic_pipeline/examples and change the paths to match where the data is (Be careful here, there is a lot to change) 
 
  <img width="1000" alt="6__#$!@%!#__unknown" src="https://github.com/kpicteam/kpic_pipeline/assets/74935396/a9af6655-cf43-4e52-8fcf-fe95bb42e271">
  
