@@ -177,7 +177,7 @@ shifts = np.linspace(-500, 500, 100)
 
 # ccf, acf = xcorr.simple_xcorr(shifts, sf2_wvs[orders], sf2_fluxes[orders], model_wvs, model_flux)
 
-ccf, acf, _ = xcorr.lsqr_xcorr(shifts, sf2_wvs[orders], sf2_fluxes[orders], sf2_wvs[orders].ravel(), sf2_star_fluxes[orders].ravel(), model_wvs, model_flux, orders_responses=response[orders], orders_fluxes_unc=sf2_errors)
+ccf, acf, _ = xcorr.lsqr_xcorr(shifts, sf2_wvs[orders], sf2_fluxes[orders], sf2_wvs[orders].ravel(), sf2_star_fluxes[orders].ravel(), model_wvs, model_flux, orders_responses=response[orders], orders_fluxes_unc=sf2_errors[orders])
   
 plt.figure()
 plt.plot(shifts, ccf)
