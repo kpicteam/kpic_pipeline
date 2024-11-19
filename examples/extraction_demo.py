@@ -22,8 +22,12 @@ from kpicdrp.caldb import det_caldb, trace_caldb
 
 mypool = mp.Pool(2)
 
+# define the extraction methods
+box = False # box or optimal extraction
+subtract_method = 'bkgd' # bkgd (background) or nod (nod subtraction/pair subtraction)
+
 # Public KPIC google drive
-kpicpublicdir = "fill/in/your/path/public_kpic_data/" # main data dir
+kpicpublicdir = "." # main data dir
 
 raw_data_dir = os.path.join(kpicpublicdir,"20200928_HIP_95771", "raw") # raw 2D images
 out_flux_dir = os.path.join(kpicpublicdir,"20200928_HIP_95771", "fluxes")
@@ -36,9 +40,15 @@ out_flux_dir = os.path.join(kpicpublicdir,"20200928_HIP_95771", "fluxes")
 if not os.path.exists(os.path.join(out_flux_dir)):
     os.makedirs(os.path.join(out_flux_dir))
 filelist = glob(os.path.join(raw_data_dir, "*.fits"))
-
+filelist.sort()
 
 raw_sci_dataset = data.Dataset(filelist=filelist, dtype=data.DetectorFrame)
+
+# only nod/pair subtraction requires fiber information; this only works for data older than 2021 October
+if subtract_method == 'nod':
+    fiber_goals = raw_sci_dataset.get_header_values("FIUGNM")
+    fiber_goals = [int(i[-1]) for i in fiber_goals]
+    print('fiber_goals', fiber_goals)
 
 # fetch calibration files
 bkgd = det_caldb.get_calib(raw_sci_dataset[0], type="Background")
@@ -50,14 +60,20 @@ trace_dat = trace_caldb.get_calib(raw_sci_dataset[0])
 if 'b1' not in trace_dat.labels:
     trace_dat = trace.get_background_traces(trace_dat)
 
-sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True)
+if subtract_method == 'bkgd':
+    sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, bkgd, badpixmap, detect_cosmics=True, add_baryrv=True)
 
-spectral_dataset = extraction.extract_flux(sci_dataset, trace_dat, fit_background=True, bad_pixel_fraction=0.01, pool=mypool)
+    spectral_dataset = extraction.extract_flux(sci_dataset, trace_dat, fit_background=True, bad_pixel_fraction=0.01, pool=mypool, box=box)
+elif subtract_method == 'nod':
+    sci_dataset = extraction.process_sci_raw2d(raw_sci_dataset, None, badpixmap, detect_cosmics=True, add_baryrv=True, nod_subtraction='nod', fiber_goals=fiber_goals)
+
+    spectral_dataset = extraction.extract_flux(sci_dataset, trace_dat, fit_background=False, bad_pixel_fraction=0.01, pool=mypool, box=box)
+
 
 spectral_dataset.save(filedir=out_flux_dir)
 
 for filename in filelist:
-    out_filename = os.path.join(out_flux_dir, os.path.basename(filename).replace(".fits", "_bkgdsub_spectra.fits"))
+    out_filename = os.path.join(out_flux_dir, os.path.basename(filename).replace(".fits", f"_{subtract_method}sub_spectra.fits"))
     this_spectrum = data.Spectrum(filepath=out_filename)
     spec = this_spectrum.fluxes
     err = this_spectrum.errs

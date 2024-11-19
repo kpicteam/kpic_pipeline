@@ -3,3 +3,6 @@ kpicdrp.egg-info/*
 *.pyc
 examples/*.fits
 caldb_*.csv
+jbdrp/*
+*.DS_Store
+kpicdrp/.DS_Store
