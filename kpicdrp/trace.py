@@ -180,8 +180,8 @@ def fibers_guess(fiber_dataset, N_order=9):
             res = minimize(objective, guess, args=(x[left:right], 2*flattened[left:right]/flattened[peak]), method='Nelder-Mead',
                    options={"xatol": 1e-6, "maxiter": 1e5,"initial_simplex":initial_simplex,"disp":False})
             # fiber_guess.append([int(np.round(res.x[0])),int(np.round(res.x[1]))])
-            fiber_guess.append(np.round(res.x).astype(np.int_))
-            # print(res.x,np.round(res.x).astype(np.int_))
+            fiber_guess.append(np.round(res.x).astype(int))
+            # print(res.x,np.round(res.x).astype(int))
             # fiber_guess.append(res.x)
             # plt.plot(x[left:right], tophat(x[left:right], *(res.x))*flattened[peak])
             # plt.plot(x[left:right],flattened[left:right])
@@ -254,7 +254,7 @@ def _smoothing(vec,x):
     # plt.show()
 
     # x_knots = np.concatenate([[0],np.arange(400, 1701, 100).astype(np.int),[trace_calib.shape[2]-1]])  # np.array([wvs_stamp[wvid] for wvid in )
-    x_knots = np.linspace(0, len(x)-1, 10,endpoint=True).astype(np.int_)  # Changed by LF 05 May 21 to deal with different array sizes
+    x_knots = np.linspace(0, len(x)-1, 10,endpoint=True).astype(int)  # Changed by LF 05 May 21 to deal with different array sizes
     paras0 = np.array(vec_polyfit[x_knots].tolist())
     simplex_init_steps = np.ones(np.size(paras0))*vec_hpf_std*100
     initial_simplex = np.concatenate([paras0[None, :], paras0[None, :] + np.diag(simplex_init_steps)],axis=0)

@@ -108,7 +108,7 @@ def simple_xcorr(shifts, orders_wvs, orders_fluxes, template_wvs, template_fluxe
 
 
 def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes,
-               template_wvs, template_fluxes, orders_responses=None):
+               template_wvs, template_fluxes, orders_responses=None, orders_fluxes_unc=None):
     """
     Estimate the flux of the planet using lsqr analysis as a function of shift. 
 
@@ -120,7 +120,9 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         star_template_fluxes: np.array of fluxes for star template, or list of np.array for multiple fibers
         template_wvs: np.array of wvs for the plnaet template, or list of np.array
         template_fluxes: np.array of fluxes for the plnaet template, or list of np.array
-        orders_responses (Norders, Nchannels) or (Nfibers, Norders, Nchannels) array of spectral responses
+        orders_responses: (Norders, Nchannels) or (Nfibers, Norders, Nchannels) array of spectral responses
+        orders_fluxes_unc: (Norders, Nchannels) or (Nfibers, Norders, Nchannels) array of uncertainties in spectral responses. 
+                           If no uncertainties are provided, the cross-correlation assumes equal uncertainties
 
     Returns:
         ccf: cross correlation of the planet template with the data
@@ -137,8 +139,12 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         star_template_fluxes = [star_template_fluxes, ]
         template_wvs = [template_wvs,]
         template_fluxes = [template_fluxes,]
+        
         if orders_responses is not None:
             orders_responses = orders_responses.reshape([1, orders_responses.shape[0], orders_responses.shape[1] ])
+        
+        if orders_fluxes_unc is not None:
+            orders_fluxes_unc = orders_fluxes_unc.reshape([1, orders_fluxes_unc.shape[0], orders_fluxes_unc.shape[1] ])
 
     fluxes = []
     star_fluxes = []
@@ -158,6 +164,7 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
         all_data = []
         fib_ids = []
         order_ids = []
+        all_weights= []  #only used when channel uncertainties are not assumed equal
 
         for fib in range(orders_wvs.shape[0]):
             for i in range(orders_wvs.shape[1]):    
@@ -170,6 +177,9 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
                 else:
                     resp_template = 1
                 
+                if orders_fluxes_unc is not None:
+                    order_unc = orders_fluxes_unc[fib, i]
+
                 order_copy = np.copy(order)
                 order_mask = np.where(np.isnan(order))
                 order_copy[order_mask] = np.nanmedian(order)
@@ -199,7 +209,15 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
                 star_template = (star_template - star_continuum) + np.median(star_continuum)
                 star_template[star_mask] = np.nan
 
-                good = np.where((~np.isnan(order_copy)) & (~np.isnan(template)) & (~np.isnan(star_template)) & (~np.isnan(template_noshift)))
+
+                if orders_fluxes_unc is not None: 
+                    unc_copy = np.copy(order_unc)
+                    good = np.where((~np.isnan(order_copy)) & (~np.isnan(template)) & (~np.isnan(star_template)) & (~np.isnan(template_noshift)) & (~np.isnan(unc_copy)))
+                    order_weights = 1/np.square(unc_copy)
+                    all_weights = np.append(all_weights, order_weights[good]) 
+                else: 
+                    good = np.where((~np.isnan(order_copy)) & (~np.isnan(template)) & (~np.isnan(star_template)) & (~np.isnan(template_noshift)))                        
+        
                 all_data = np.append(all_data, order_copy[good])
                 all_pl_template = np.append(all_pl_template, template[good])
                 all_star_template = np.append(all_star_template, star_template[good])
@@ -208,18 +226,33 @@ def lsqr_xcorr(shifts, orders_wvs, orders_fluxes, star_wvs, star_template_fluxes
                 fib_ids = np.append(fib_ids, np.ones(template[good].shape) * fib)
 
         A_matrix = np.zeros([np.size(all_pl_template), orders_wvs.shape[0] * orders_wvs.shape[1] + 1])
-        A_matrix[:, 0] = all_pl_template
-        for fib in range(orders_wvs.shape[0]):
-            for i in range(orders_wvs.shape[1]): 
-                order_indices = np.where((order_ids == i) & (fib_ids == fib))
-                index = fib * orders_wvs.shape[1] + i + 1
-                A_matrix[order_indices[0], index] = all_star_template[order_indices]
 
-        results = optimize.lsq_linear(A_matrix, all_data)
+        if orders_fluxes_unc is not None:
+            A_matrix[:, 0] = all_pl_template*all_weights
+            for fib in range(orders_wvs.shape[0]):
+                for i in range(orders_wvs.shape[1]): 
+                    order_indices = np.where((order_ids == i) & (fib_ids == fib))
+                    index = fib * orders_wvs.shape[1] + i + 1
+                    A_matrix[order_indices[0], index] = all_star_template[order_indices]*all_weights[order_indices]
+            results = optimize.lsq_linear(A_matrix, all_data*all_weights)
 
-        results_noshift = optimize.lsq_linear(A_matrix, all_pl_noshift_template)
+            results_noshift = optimize.lsq_linear(A_matrix, all_pl_noshift_template*all_weights)
 
-        results_star = optimize.lsq_linear(A_matrix, all_star_template)
+            results_star = optimize.lsq_linear(A_matrix, all_star_template*all_weights)   
+
+        else: #assume equal uncertainties
+            A_matrix[:, 0] = all_pl_template
+            for fib in range(orders_wvs.shape[0]):
+                for i in range(orders_wvs.shape[1]): 
+                    order_indices = np.where((order_ids == i) & (fib_ids == fib))
+                    index = fib * orders_wvs.shape[1] + i + 1
+                    A_matrix[order_indices[0], index] = all_star_template[order_indices]
+
+            results = optimize.lsq_linear(A_matrix, all_data)
+
+            results_noshift = optimize.lsq_linear(A_matrix, all_pl_noshift_template)
+
+            results_star = optimize.lsq_linear(A_matrix, all_star_template)
 
         fluxes.append(results.x[0])
         star_fluxes.append(results.x[1:])

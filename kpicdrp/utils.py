@@ -105,7 +105,7 @@ def convolve_spectrum_line_width(wvs,spectrum,line_widths,mypool=None):
         conv_spectrum: broadened spectrum
     """
     if mypool is None:
-        return _task_convolve_spectrum_line_width((np.arange(np.size(spectrum)).astype(np.int_),wvs,spectrum,line_widths))
+        return _task_convolve_spectrum_line_width((np.arange(np.size(spectrum)).astype(int),wvs,spectrum,line_widths))
     else:
         conv_spectrum = np.zeros(spectrum.shape)
 
@@ -113,8 +113,8 @@ def convolve_spectrum_line_width(wvs,spectrum,line_widths,mypool=None):
         N_chunks = np.size(spectrum)//chunk_size
         indices_list = []
         for k in range(N_chunks-1):
-            indices_list.append(np.arange(k*chunk_size,(k+1)*chunk_size).astype(np.int_))
-        indices_list.append(np.arange((N_chunks-1)*chunk_size,np.size(spectrum)).astype(np.int_))
+            indices_list.append(np.arange(k*chunk_size,(k+1)*chunk_size).astype(int))
+        indices_list.append(np.arange((N_chunks-1)*chunk_size,np.size(spectrum)).astype(int))
         outputs_list = mypool.map(_task_convolve_spectrum_line_width, zip(indices_list,
                                                                itertools.repeat(wvs),
                                                                itertools.repeat(spectrum),

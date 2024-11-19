@@ -8,7 +8,7 @@ import astropy.table as table
 import scipy.ndimage as ndi
 import os
 import multiprocessing as mp
-import astropy.units as u
+import astropy.units as u 
 
 import matplotlib.pylab as plt
 
@@ -72,17 +72,19 @@ for num in filenums:
     all_errors.append(err)
 
 all_fluxes = np.array(all_fluxes)
-all_errors = np.array(all_errors)
+all_errors = np.array(all_errors) 
+all_weights = 1/np.square(np.copy(all_errors))
 
-print(np.nanmean(all_fluxes, axis=(1,2)))
+print('unweighted average companion flux is {} counts'.format(np.nanmean(all_fluxes, axis=(1,2))))
 
-# combine in time
-tot_fluxes = np.nansum(all_fluxes, axis=0)
-tot_errors = np.sqrt(np.nansum(all_errors**2, axis=0))
+# combine in time with weighted mean, ignore nans  
+tot_fluxes = np.nansum(all_fluxes*all_weights, axis=0)/np.nansum(all_weights, axis=0)      
+tot_errors = np.sqrt(1/np.nansum(all_weights, axis=0))   
 
 sf2_fluxes = tot_fluxes[1]
 sf2_fluxes[:,:50] = np.nan
 sf2_fluxes[:,-150:] = np.nan
+sf2_errors = tot_errors[1]
 
 # read in star fluxes
 
@@ -101,13 +103,14 @@ for num in star_filenums:
     all_star_errors.append(err)
 
 all_star_fluxes = np.array(all_star_fluxes)
-all_star_errors = np.array(all_star_errors)
+all_star_errors = np.array(all_star_errors) 
+all_star_weights = 1/np.square(np.copy(all_star_errors))
 
-print(np.nanmean(all_star_fluxes, axis=(1,2)))
+print('unweighted average star flux is {} counts'.format(np.nanmean(all_star_fluxes, axis=(1,2))))
 
-# combine in time
-tot_star_fluxes = np.nansum(all_star_fluxes, axis=0)
-tot_star_errors = np.sqrt(np.nansum(all_star_errors**2, axis=0))
+# combine in time with weighted mean, ignore nans 
+tot_star_fluxes = np.nansum(all_star_fluxes*all_star_weights, axis=0)/np.nansum(all_star_weights, axis=0) 
+tot_star_errors = np.sqrt(1/np.nansum(all_star_weights, axis=0))   
 
 sf2_star_fluxes = tot_star_fluxes[1]
 
@@ -174,7 +177,7 @@ shifts = np.linspace(-500, 500, 100)
 
 # ccf, acf = xcorr.simple_xcorr(shifts, sf2_wvs[orders], sf2_fluxes[orders], model_wvs, model_flux)
 
-ccf, acf, _ = xcorr.lsqr_xcorr(shifts, sf2_wvs[orders], sf2_fluxes[orders], sf2_wvs[orders].ravel(), sf2_star_fluxes[orders].ravel(), model_wvs, model_flux, orders_responses=response[orders])
+ccf, acf, _ = xcorr.lsqr_xcorr(shifts, sf2_wvs[orders], sf2_fluxes[orders], sf2_wvs[orders].ravel(), sf2_star_fluxes[orders].ravel(), model_wvs, model_flux, orders_responses=response[orders], orders_fluxes_unc=sf2_errors[orders])
   
 plt.figure()
 plt.plot(shifts, ccf)

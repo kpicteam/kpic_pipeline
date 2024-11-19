@@ -129,7 +129,7 @@ def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_int
 
     if N_nodes_wvs <=3:
         M2 = np.zeros((np.size(x),(N_nodes_wvs)))
-        x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(np.int_)]#np.array([wvs_stamp[wvid] for wvid in )
+        x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(int)]#np.array([wvs_stamp[wvid] for wvid in )
         for polypower in range(N_nodes_wvs-1):
             if polypower == 0:
                 where_chunk = np.where((x_knots[polypower]<=x)*(x<=x_knots[polypower+1]))
@@ -139,7 +139,7 @@ def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_int
             M2[where_chunk[0],1+polypower] = (x[where_chunk]-x_knots[polypower])/(x_knots[polypower+1]-x_knots[polypower])
         wvs = np.dot(M2,wvs_coefs)
     else:
-        x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(np.int_)]#np.array([wvs_stamp[wvid] for wvid in )
+        x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(int)]#np.array([wvs_stamp[wvid] for wvid in )
         spl = InterpolatedUnivariateSpline(x_knots,wvs_coefs,k=3,ext=0)
         wvs= spl(x)
 
@@ -151,7 +151,7 @@ def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_int
         tmp *= 1/(1+F*np.sin(delta/2)**2)
     M0_mn = np.nanmean(tmp)
     tmp /= M0_mn
-    x_knots = x[np.linspace(0,len(x)-1,blaze_chunks+1,endpoint=True).astype(np.int_)]
+    x_knots = x[np.linspace(0,len(x)-1,blaze_chunks+1,endpoint=True).astype(int)]
     for polypower in range(blaze_chunks):
         if polypower == 0:
             where_chunk = np.where((x_knots[polypower]<=x)*(x<=x_knots[polypower+1]))
@@ -164,7 +164,7 @@ def wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,telluric_int
     if 0:
         deg_off = 1
         Moff = np.zeros((np.size(x),(deg_off+1)))
-        x_knots = x[np.linspace(0,len(x)-1,deg_off+1,endpoint=True).astype(np.int_)]
+        x_knots = x[np.linspace(0,len(x)-1,deg_off+1,endpoint=True).astype(int)]
         for polypower in range(deg_off):
             if polypower == 0:
                 where_chunk = np.where((x_knots[polypower]<=x)*(x<=x_knots[polypower+1]))
@@ -203,7 +203,7 @@ def _fit_wavecal(paras):
     if init_grid_search:
         tmp_deg_wvs = 4
         N_dwv = init_grid_dwv//dwv
-        x_knots = x[np.linspace(0,len(x)-1,tmp_deg_wvs,endpoint=True).astype(np.int_)]#np.array([wvs_stamp[wvid] for wvid in )
+        x_knots = x[np.linspace(0,len(x)-1,tmp_deg_wvs,endpoint=True).astype(int)]#np.array([wvs_stamp[wvid] for wvid in )
         Npix = spectrum.shape[-1]
 
         wvs_min = np.arange(wvs0[0]-N_dwv*dwv,wvs0[0]+N_dwv*dwv,dwv)#-130*dwv/2
@@ -228,7 +228,7 @@ def _fit_wavecal(paras):
         wvs00 = wvs0
 
     ## Real initialization
-    x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(np.int_)]
+    x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(int)]
     paras0 = wvs00[x_knots].tolist()
     simplex_init_steps = [dwv/4,]*len(paras0)
     if fitsrv:
@@ -331,7 +331,7 @@ def psg_wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,psg_tupl
 
     tel_func = interp1d(telluric_wvs,scale_psg(psg_tuple, airmass, pwv),bounds_error=False,fill_value=0)
 
-    x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(np.int_)]#np.array([wvs_stamp[wvid] for wvid in )
+    x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(int)]#np.array([wvs_stamp[wvid] for wvid in )
     spl = InterpolatedUnivariateSpline(x_knots,wvs_coefs,k=np.min([3,N_nodes_wvs-1]),ext=0)
     wvs= spl(x)
 
@@ -343,13 +343,13 @@ def psg_wavcal_model(paras, x,spectrum,spec_err, star_func,telluric_wvs,psg_tupl
     M0_mn = np.nanmean(tmp)
     tmp /= M0_mn
 
-    x_knots = x[np.linspace(0,len(x)-1,blaze_chunks+1,endpoint=True).astype(np.int_)]
+    x_knots = x[np.linspace(0,len(x)-1,blaze_chunks+1,endpoint=True).astype(int)]
     M = utils.get_spline_model(x_knots,x,spline_degree=np.min([blaze_chunks,3]))
     M = tmp[:,None]*M
 
     if 0:
         deg_off = 4
-        x_knots = x[np.linspace(0,len(x)-1,deg_off+1,endpoint=True).astype(np.int_)]
+        x_knots = x[np.linspace(0,len(x)-1,deg_off+1,endpoint=True).astype(int)]
         Moff = utils.get_spline_model(x_knots,x,spline_degree=3)
         M = np.concatenate([M,Moff], axis = 1)
 
@@ -382,7 +382,7 @@ def _fit_psg_wavecal(paras):
     if init_grid_search:
         tmp_deg_wvs = 4
         N_dwv = init_grid_dwv//dwv
-        x_knots = x[np.linspace(0,len(x)-1,tmp_deg_wvs,endpoint=True).astype(np.int_)]#np.array([wvs_stamp[wvid] for wvid in )
+        x_knots = x[np.linspace(0,len(x)-1,tmp_deg_wvs,endpoint=True).astype(int)]#np.array([wvs_stamp[wvid] for wvid in )
         Npix = spectrum.shape[-1]
 
         wvs_min = np.arange(wvs0[0]-N_dwv*dwv,wvs0[0]+N_dwv*dwv,dwv)#-130*dwv/2
@@ -407,7 +407,7 @@ def _fit_psg_wavecal(paras):
         wvs00 = wvs0
 
     ## Real initialization
-    x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(np.int_)]
+    x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(int)]
     paras0 = wvs00[x_knots].tolist()
     simplex_init_steps = [dwv/4,]*len(paras0)
     if fitsrv:
@@ -717,7 +717,7 @@ def psg_wavcal_fm(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model
             if simplewvsfit:
                 new_wvs = wvs_init[orderid, :]  + wvs_coefs[0] + (wvs_init[orderid, :]-np.mean(wvs_init[orderid, :])) * (wvs_coefs[1])
             else:
-                x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(np.int_)]  # np.array([wvs_stamp[wvid] for wvid in )
+                x_knots = x[np.linspace(0, len(x) - 1, N_nodes_wvs, endpoint=True).astype(int)]  # np.array([wvs_stamp[wvid] for wvid in )
                 spl = InterpolatedUnivariateSpline(x_knots, wvs_coefs, k=np.min([3, N_nodes_wvs - 1]), ext=0)
                 new_wvs = spl(x)
             out_newwvs[orderid, :] = new_wvs
@@ -807,7 +807,7 @@ def psg_wavcal_fm(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model
         else:
             conv_order_spec_func = fixed_spec_func
 
-        x_knots = x[np.linspace(0, len(x) - 1, blaze_chunks + 1, endpoint=True).astype(np.int_)]
+        x_knots = x[np.linspace(0, len(x) - 1, blaze_chunks + 1, endpoint=True).astype(int)]
         M0 = utils.get_spline_model(x_knots, x, spline_degree=np.min([blaze_chunks, 3]))
         for orderid in range(N_orders):
             new_wvs = out_newwvs[orderid,:]
@@ -856,7 +856,7 @@ def psg_wavcal_fm(nonlin_paras, spectrum,spec_err, line_width_func,stellar_model
 #         if simplefit:
 #             new_wvs[orderid,:] = wvs_init[orderid,:]*(1+wvs_coefs[1])+wvs_coefs[0]
 #         else:
-#             x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(np.int_)]#np.array([wvs_stamp[wvid] for wvid in )
+#             x_knots = x[np.linspace(0,len(x)-1,N_nodes_wvs,endpoint=True).astype(int)]#np.array([wvs_stamp[wvid] for wvid in )
 #             spl = InterpolatedUnivariateSpline(x_knots,wvs_coefs,k=np.min([3,N_nodes_wvs-1]),ext=0)
 #             new_wvs[orderid,:] = spl(x)
 #
@@ -1009,7 +1009,7 @@ def optimize_wavcal(fm_func, fm_paras,paras0,nonlin_paras_mins,nonlin_paras_maxs
     # if np.size(validpara[0]) != (blaze_chunks+1)*N_order:
     #     raise
     # x = np.arange(fm_paras["spectrum"].shape[1])
-    # x_knots = x[np.linspace(0, len(x) - 1, blaze_chunks + 1, endpoint=True).astype(np.int_)]
+    # x_knots = x[np.linspace(0, len(x) - 1, blaze_chunks + 1, endpoint=True).astype(int)]
     # M0 = utils.get_spline_model(x_knots, x, spline_degree=np.min([blaze_chunks, 3]))
     # for orderid in range(fm_paras["spectrum"].shape[1]):
 
